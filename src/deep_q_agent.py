@@ -18,7 +18,8 @@ class DeepQAgent(AgentWithConverter):
     # of classes)
 
     def convert_obs(self, observation):
-        return observation.to_vect()
+        return observation.rho
+        # return observation.to_vect()
 
     def my_act(self, transformed_observation, reward, done=False):
         if self.deep_q is None:
