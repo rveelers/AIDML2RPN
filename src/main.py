@@ -40,6 +40,7 @@ if __name__ == "__main__":
     plt.plot(my_agent.deep_q.qvalue_evolution)
     plt.axhline(y=0, linewidth=3, color='red')
     plt.xlim(0, len(my_agent.deep_q.qvalue_evolution))
+    plt.savefig(fname="qvalue_evolution")
     plt.show()
 
     # Run the agent
