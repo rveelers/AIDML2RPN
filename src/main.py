@@ -4,30 +4,36 @@ import matplotlib.pyplot as plt
 
 from grid2op.Plot import EpisodeReplay
 from grid2op.PlotGrid.PlotMatplot import PlotMatplot
-from grid2op.Reward import RedispReward
 from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 
 from deep_q_agent import DeepQAgent
 from train_agent import TrainAgent
 
-if __name__ == "__main__":
 
-    # Initialize the environment and agent
-    env = grid2op.make("rte_case14_redisp", test=True, reward_class=L2RPNReward)
-    my_agent = DeepQAgent(env.action_space, mode="DQN")
-
-    # Load an existing network
-    # my_agent.init_deep_q(my_agent.convert_obs(env.get_obs()))
-    # my_agent.load_network(os.path.join("SavedNetworks", "saved_agent_" + "DQN" + ".h5"))
-
-    # Train a new network
-    trainer = TrainAgent(agent=my_agent, env=env, reward_fun=RedispReward)
-    trainer.train(1000)
+def get_network_file_name(grid, network_type, episodes):
     path_networks = "SavedNetworks"
     if not os.path.exists(path_networks):
         os.mkdir(path_networks)
-    trainer.agent.deep_q.save_network(os.path.join(path_networks, "saved_agent_" + trainer.agent.mode + ".h5"))
+    return os.path.join(path_networks, "agent_" + grid + "_" + network_type + "_" + str(episodes) + ".h5")
+
+
+if __name__ == "__main__":
+
+    # Initialize the environment and agent
+    path_grid = "rte_case14_redisp"
+    env = grid2op.make(path_grid, test=True, reward_class=L2RPNReward)
+    my_agent = DeepQAgent(env.action_space, mode="DQN")
+
+    # Load an existing network
+    my_agent.init_deep_q(my_agent.convert_obs(env.get_obs()))
+    my_agent.load_network(get_network_file_name(path_grid, "DQN", 1000))
+
+    # Train a new network
+    # trainer = TrainAgent(agent=my_agent, env=env, reward_fun=L2RPNReward)
+    # num_episodes = 1000
+    # trainer.train(num_episodes)
+    # trainer.agent.deep_q.save_network(get_network_file_name(path_grid, trainer.agent.mode, num_episodes))
 
     # Plot evaluation results
     plt.figure(figsize=(30, 20))
