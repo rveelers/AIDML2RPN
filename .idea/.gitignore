@@ -8,3 +8,6 @@ profiles_settings.xml
 vcs.xml
 
 AIDML2RPN.iml
+
+Agents/
+SavedNetworks/
