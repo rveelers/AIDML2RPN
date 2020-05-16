@@ -11,7 +11,15 @@ from deep_q_agent import DeepQAgent
 from train_agent import TrainAgent
 
 
-def get_network_file_name(grid, network_type, episodes):
+grid_paths = [
+    "rte_case5_example",
+    "rte_case14_test",
+    "rte_case14_redisp",
+    "rte_case14_realistic"
+]
+
+
+def get_network_file_name(grid, network_type, episodes, additional="", extension=".h5"):
     path_networks = "SavedNetworks"
     if not os.path.exists(path_networks):
         os.mkdir(path_networks)
@@ -21,8 +29,8 @@ def get_network_file_name(grid, network_type, episodes):
 if __name__ == "__main__":
 
     # Initialize the environment and agent
-    path_grid = "rte_case14_redisp"
-    env = grid2op.make(path_grid, test=True, reward_class=L2RPNReward)
+    path_grid = grid_paths[0]
+    env = grid2op.make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologySetAction)
     my_agent = DeepQAgent(env.action_space, mode="DQN")
 
     # Load an existing network
