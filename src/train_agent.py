@@ -46,7 +46,7 @@ class TrainAgent(object):
             self.agent.process_buffer.append(self.agent.convert_obs(s1))
         return close_env
 
-    def train(self, num_frames, env=None):
+    def train(self, num_frames):
         # this function existed in the original implementation, but has been slightly adapted.
 
         # first we create an environment or make sure the given environment is valid
@@ -60,8 +60,7 @@ class TrainAgent(object):
         total_reward = 0
 
         while observation_num < num_frames:
-            if observation_num % 1000 == 999:
-                print(("Executing loop %d" % observation_num))
+            print(("Executing loop %d" % observation_num))
 
             # Slowly decay the learning rate
             if epsilon > FINAL_EPSILON:
@@ -77,10 +76,12 @@ class TrainAgent(object):
             predict_movement_int, predict_q_value = self.agent.deep_q.predict_movement(curr_state, epsilon)
             # and then we convert it to a valid action
             act = self.agent.convert_act(predict_movement_int)
+            print(act)
 
             reward, done = 0, False
             for i in range(NUM_FRAMES):
                 temp_observation_obj, temp_reward, temp_done, _ = self.env.step(act)
+                print("Reward: ", temp_reward)
                 # here it has been adapted too. The observation get from the environment is
                 # first converted to vector
 
