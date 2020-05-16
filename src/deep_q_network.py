@@ -10,14 +10,11 @@ from tensorflow.python.keras.optimizer_v2.adam import Adam
 
 from hyper_parameters import NUM_FRAMES, DECAY_RATE, TAU
 
-OBSERVATION_SIZE = 100
-NUM_ACTIONS = 100
-
 
 class DeepQ(object):
     """Constructs the desired deep q learning network"""
 
-    def __init__(self, action_size, lr=1e-5, observation_size=OBSERVATION_SIZE):
+    def __init__(self, action_size, observation_size, lr=1e-5):
         # It is not modified from  Abhinav Sagar's code, except for adding the possibility to change the learning rate
         # in parameter is also present the size of the action space
         # (it used to be a global variable in the original code)
@@ -41,9 +38,9 @@ class DeepQ(object):
         layer2 = Activation('relu')(layer2)
         layer3 = Dense(self.observation_size)(layer2)
         layer3 = Activation('relu')(layer3)
-        layer4 = Dense(2 * NUM_ACTIONS)(layer3)
+        layer4 = Dense(2 * self.action_size)(layer3)
         layer4 = Activation('relu')(layer4)
-        output = Dense(NUM_ACTIONS)(layer4)
+        output = Dense(self.action_size)(layer4)
 
         self.model = Model(inputs=[input_layer], outputs=[output])
         self.model.compile(loss='mse', optimizer=Adam(lr=self.lr_))
@@ -59,7 +56,7 @@ class DeepQ(object):
         q_actions = self.model.predict(data.reshape(1, self.observation_size * NUM_FRAMES), batch_size=1)
 
         if rand_val < epsilon:
-            opt_policy = np.random.randint(0, NUM_ACTIONS)
+            opt_policy = np.random.randint(0, self.action_size)
         else:
             opt_policy = np.argmax(np.abs(q_actions))
 
@@ -71,14 +68,14 @@ class DeepQ(object):
         """Trains network to fit given parameters"""
         # nothing has changed from the original implementation, except for changing the input dimension 'reshape'
         batch_size = s_batch.shape[0]
-        targets = np.zeros((batch_size, NUM_ACTIONS))
+        targets = np.zeros((batch_size, self.action_size))
 
         for i in range(batch_size):
             targets[i] = self.model.predict(s_batch[i].reshape(1, self.observation_size * NUM_FRAMES), batch_size=1)
             fut_action = self.target_model.predict(s2_batch[i].reshape(1, self.observation_size * NUM_FRAMES),
                                                    batch_size=1)
             targets[i, a_batch[i]] = r_batch[i]
-            if d_batch[i] == False:
+            if not d_batch[i]:
                 targets[i, a_batch[i]] += DECAY_RATE * np.max(fut_action)
         loss = self.model.train_on_batch(s_batch, targets)
         # Print the loss every 100 iterations.

@@ -25,7 +25,6 @@ class DeepQAgent(AgentWithConverter):
         if self.deep_q is None:
             self.init_deep_q(transformed_observation)
         predict_movement_int, *_ = self.deep_q.predict_movement(transformed_observation, epsilon=0.0)
-        # print("predict_movement_int: {}".format(predict_movement_int))
         return predict_movement_int
 
     def init_deep_q(self, transformed_observation):
@@ -46,6 +45,7 @@ class DeepQAgent(AgentWithConverter):
 
         # and now back to the origin implementation
         self.replay_buffer = ReplayBuffer(BUFFER_SIZE)
+        self.process_buffer = []
 
         # compare to original implementation, i don't know the observation space size.
         # Because it depends on the component of the observation we want to look at. So these neural network will
