@@ -64,6 +64,10 @@ class DeepQ(object):
 
         return opt_policy, q_actions[0, opt_policy]
 
+    def predict_rewards(self, data):
+        q_actions = self.model.predict(data.reshape(1, self.observation_size * NUM_FRAMES), batch_size=1)
+        return q_actions[0]
+
     def train(self, s_batch, a_batch, r_batch, d_batch, s2_batch, observation_num):
         """Trains network to fit given parameters"""
         # nothing has changed from the original implementation, except for changing the input dimension 'reshape'
@@ -81,6 +85,12 @@ class DeepQ(object):
         # Print the loss every 100 iterations.
         if observation_num % 100 == 0:
             print("We had a loss equal to ", loss)
+
+    def train_imitation(self, s_batch, t_batch):
+        """ Trains network on generated data: Imitation Learning. """
+        loss = self.model.train_on_batch(s_batch, t_batch)
+        # print("We had an imitation loss equal to ", loss)
+        return loss
 
     def save_network(self, path):
         # Saves model at specified path as h5 file
