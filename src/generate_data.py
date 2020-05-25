@@ -14,9 +14,8 @@ from grid2op.Reward import L2RPNReward
 path_grid = "l2rpn_2019"
 env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
 
-run_id = 5
-n = 1000
-max_iter = 1000
+run_id = 0
+n = 10000
 num_states = env.get_obs().rho.shape[0]
 num_actions = env.action_space.size()
 print('State space size:', num_states)
@@ -48,14 +47,14 @@ for i in range(n):
     obs, reward, done, _ = env.step(converter.convert_act(int(my_act)))
 
     # Reset environment when game over state is reached or max iterations is reached
-    if done or i % max_iter == max_iter - 1:
+    if done:
         reset_count += 1
         env.reset()
 
     cum_reward += reward
-
-    # np.save(os.path.join('generated_data', 'states_{}_{}_{}.npy'.format(n, num_states, run_id)), states, allow_pickle=True)
-    # np.save(os.path.join('generated_data', 'rewards_{}_{}_{}.npy'.format(n, num_actions, run_id)), rewards, allow_pickle=True)
+    if i % 1000 == 0:
+        np.save(os.path.join('generated_data', 'states_{}_{}_{}.npy'.format(n, num_states, run_id)), states, allow_pickle=True)
+        np.save(os.path.join('generated_data', 'rewards_{}_{}_{}.npy'.format(n, num_actions, run_id)), rewards, allow_pickle=True)
 
 end_time = time.time() - start_time
 # print(rewards)

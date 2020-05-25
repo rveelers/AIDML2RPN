@@ -59,11 +59,12 @@ class DeepQ(object):
         return q_actions[0]
 
     def train(self, s_batch, a_batch, r_batch, d_batch, s2_batch):
-        """ Trains network to fit given parameters. """
+        """ Trains the network on a batch of input.
+        The parameters are batches of states, actions, rewards, done booleans and next states. """
         batch_size = s_batch.shape[0]
         targets = np.zeros((batch_size, self.action_size))
 
-        # Train according the Bellman Equation
+        # Train according to the Bellman Equation
         for i in range(batch_size):
             targets[i] = self.model.predict(s_batch[i].reshape(1, self.observation_size), batch_size=1)
             fut_action = self.target_model.predict(s2_batch[i].reshape(1, self.observation_size), batch_size=1)
@@ -93,3 +94,8 @@ class DeepQ(object):
         for i in range(len(model_weights)):
             target_model_weights[i] = TAU * model_weights[i] + (1 - TAU) * target_model_weights[i]
         self.target_model.set_weights(target_model_weights)
+
+    def replace_target(self):
+        """ The target network needs to be updated every specific number of timesteps. """
+        model_weights = self.model.get_weights()
+        self.target_model.set_weights(model_weights)
