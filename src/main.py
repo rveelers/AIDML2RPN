@@ -1,55 +1,53 @@
 import os
 import time
-import grid2op
 import matplotlib.pyplot as plt
-from grid2op.Action.TopologySetAction import TopologySetAction
 
+from grid2op.Action.TopologySetAction import TopologySetAction
 from grid2op.Plot import EpisodeReplay
 from grid2op.PlotGrid.PlotMatplot import PlotMatplot
 from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
+from grid2op.MakeEnv.Make import make
 
 from deep_q_agent import DeepQAgent
-from train_agent import TrainAgent
+from deep_q_network import DeepQ
 
 
+# All available grids, if it gives an error remove the test=True flag in the make command
 grid_paths = [
     "rte_case5_example",
     "rte_case14_test",
     "rte_case14_redisp",
-    "rte_case14_realistic"
+    "rte_case14_realistic",
+    "l2rpn_2019",  # The one we will use
+    "l2rpn_case14_sandbox",
+    "wcci_test"
 ]
 
 
-def get_network_file_name(grid, network_type, episodes, additional="", extension=".h5"):
-    path_networks = "SavedNetworks"
-    if not os.path.exists(path_networks):
-        os.mkdir(path_networks)
-    return os.path.join(path_networks, "agent_" + grid + "_" + network_type + "_" + str(episodes) + "_" + additional + extension)
-
-
-def plot_grid_layout(save_file_path=None):
-    plot_helper = PlotMatplot(env.observation_space)
+def plot_grid_layout(environment, save_file_path=None):
+    plot_helper = PlotMatplot(environment.observation_space)
     fig_layout = plot_helper.plot_layout()
     plt.show(fig_layout)
     if save_file_path is not None:
         plt.savefig(fname=save_file_path)
 
 
-def plot_grid_observation(obs, save_file_path=None):
-    plot_helper = PlotMatplot(env.observation_space)
-    fig_layout = plot_helper.plot_obs(obs)
+def plot_grid_observation(environment, observation=None, save_file_path=None):
+    plot_helper = PlotMatplot(environment.observation_space)
+    if observation is not None:
+        fig_layout = plot_helper.plot_obs(observation)
+    else:
+        fig_layout = plot_helper.plot_obs(environment.get_obs())
     if save_file_path is not None:
         plt.savefig(fname=save_file_path)
     plt.show(fig_layout)
 
 
-def train_agent(agent, environment, num_episodes=10000, save_training_evaluation=True):
-    trainer_agent = TrainAgent(agent=agent, env=environment, reward_fun=L2RPNReward)
+def train_agent(agent, environment, num_iterations=10000, save_training_evaluation=True):
     start = time.time()
-    trainer_agent.train(num_episodes)
+    agent.train(environment, num_iterations)
     print("Training time:  ", time.time() - start)
-    trainer_agent.agent.deep_q.save_network(get_network_file_name(path_grid, trainer_agent.agent.mode, num_episodes))
 
     # Plot evaluation results
     plt.figure(figsize=(30, 20))
@@ -57,18 +55,18 @@ def train_agent(agent, environment, num_episodes=10000, save_training_evaluation
     plt.axhline(y=0, linewidth=3, color='red')
     plt.xlim(0, len(my_agent.deep_q.qvalue_evolution))
     if save_training_evaluation:
-        plt.savefig(fname=get_network_file_name(path_grid, trainer_agent.agent.mode, num_episodes, additional="curve", extension=".png"))
+        network_path = os.path.join('saved_networks', 'agent_{}_{}_{}_curve.png'.format(environment.name, agent.network, num_iterations))
+        plt.savefig(fname=network_path)
     plt.show()
-    return trainer_agent
 
 
-def run_agent(environment, agent, max_iterations=100, plot_replay_episodes=True):
+def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True):
     runner = Runner(**environment.get_params_for_runner(), agentClass=None, agentInstance=agent)
     path_agents = "Agents"
     if not os.path.exists(path_agents):
         os.mkdir(path_agents)
     path_agents = os.path.join(path_agents, agent.__class__.__name__)
-    res = runner.run(nb_episode=1, path_save=path_agents, max_iter=max_iterations)
+    res = runner.run(nb_episode=1, path_save=path_agents, max_iter=num_iterations)
 
     # Print run results and plot replay visualisation
     ep_replay = EpisodeReplay(agent_path=path_agents)
@@ -86,28 +84,26 @@ def run_agent(environment, agent, max_iterations=100, plot_replay_episodes=True)
 
 if __name__ == "__main__":
 
-    # Optional settings for running on GPU
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Turns running on GPU off
-    # print(tf.config.list_physical_devices('GPU')) # Lists devices
-    # tf.debugging.set_log_device_placement(True) # Logs which device is used per operation
-
     # Initialize the environment and agent
-    path_grid = grid_paths[0]
-    env = grid2op.make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologySetAction)
-    my_agent = DeepQAgent(env.action_space, mode="DQN")
+    path_grid = "l2rpn_2019"
+    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
+    num_states = env.get_obs().rho.shape[0]
+    num_actions = env.action_space.size()
+    my_agent = DeepQAgent(env.action_space, num_states, network=DeepQ)
 
     # Plot grid visualization
-    plot_grid_layout()
+    # plot_grid_layout(env)
 
     # Load an existing network
-    # my_agent.init_deep_q(my_agent.convert_obs(env.get_obs()))
-    # my_agent.load_network(get_network_file_name(path_grid, "DQN", 10000))
+    # network_path = os.path.join('saved_networks', 'agent_{}_{}_{}.h5'.format(env.name, my_agent.network, 10000))
+    network_path = os.path.join('saved_networks', 'IL_{}_{}.h5'.format('l2rpn', 9000))
+    my_agent.load_network(network_path)
 
     # Train a new network
-    trainer = train_agent(my_agent, env, num_episodes=10000)
+    train_agent(my_agent, env, num_iterations=2000)
 
     # Run the agent
-    run_agent(env, my_agent, max_iterations=100)
+    run_agent(env, my_agent, num_iterations=5184)
 
     # Plot final episode
-    plot_grid_observation(env.get_obs())
+    plot_grid_observation(env)
