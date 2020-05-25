@@ -16,7 +16,7 @@ class DeepQAgent(AgentWithConverter):
 
         self.action_size = action_space.size()
         self.observation_size = observation_size
-        self.network = network
+        self.network_name = network.__name__
         self.replay_buffer = ReplayBuffer(BUFFER_SIZE)
         self.deep_q = network(self.action_size, self.observation_size)
 
@@ -71,9 +71,10 @@ class DeepQAgent(AgentWithConverter):
                 self.deep_q.target_train()
 
             # Save the network every 1000 iterations and final iteration
-            if iteration > BUFFER_SIZE and iteration % 1000 == 999 or iteration == num_iterations-1:
+            if iteration % 1000 == 999 or iteration == num_iterations-1:
                 print("Saving Network, current loss:", loss)
-                network_path = os.path.join('saved_networks', 'agent_{}_{}_{}.h5'.format(env.name, self.network, num_iterations))
+                network_path = os.path.join('saved_networks', 'agent_{}_{}_{}.h5'.format(
+                    env.name, self.network_name, num_iterations))
                 self.deep_q.save_network(network_path)
 
         env.close()
