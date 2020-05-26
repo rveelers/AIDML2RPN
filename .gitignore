@@ -1,0 +1,5 @@
+.idea/
+src/__pycache__/
+*.h5
+src/Agents/
+src/saved_networks/
