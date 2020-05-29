@@ -43,6 +43,7 @@ class DeepQAgent(AgentWithConverter):
         """ Train the agent. """
         curr_state = self.convert_obs(env.reset())
         epsilon = INITIAL_EPSILON
+        epsilon_decay = (INITIAL_EPSILON - FINAL_EPSILON) / (num_iterations * 0.75)
         total_reward = 0
         reset_count = 0
         loss = -1
@@ -52,8 +53,9 @@ class DeepQAgent(AgentWithConverter):
                            suffix='Episode count: {}'.format(reset_count))
 
             # Epsilon becomes smaller over time
-            if epsilon > FINAL_EPSILON:
-                epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EPSILON_DECAY
+            # if epsilon > FINAL_EPSILON:
+            #     epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EPSILON_DECAY
+            epsilon -= epsilon_decay
 
             # Predict the next step ...
             predict_movement_int, predict_q_value = self.deep_q.predict_movement(curr_state, epsilon)
