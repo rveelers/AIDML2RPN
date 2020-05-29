@@ -24,7 +24,7 @@ class DeepQAgent(AgentWithConverter):
 
     def convert_obs(self, observation):
         """ The DeepQ network uses the rho values and line status values as input. """
-        return np.concatenate((observation.rho, observation.line_status))
+        return np.concatenate((observation.rho, observation.line_status, observation.topo_vect))
 
     def my_act(self, transformed_observation, reward, done=False):
         """ This method is called by the environment when using Runner. """
