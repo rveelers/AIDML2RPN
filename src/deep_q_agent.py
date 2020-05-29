@@ -85,7 +85,7 @@ class DeepQAgent(AgentWithConverter):
 
             # Save the network every 1000 iterations and final iteration
             if iteration % 1000 == 999 or iteration == num_iterations-1:
-                print("Saving Network, current loss:", loss)
+                print("\nSaving Network, current loss:", loss)
                 network_path = os.path.join('saved_networks', '{}_{}_{}.h5'.format(
                     env.name, self.network_name, num_iterations))
                 self.deep_q.save_network(network_path)

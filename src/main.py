@@ -55,7 +55,7 @@ def train_agent(agent, environment, num_iterations=10000, save_training_evaluati
     plt.axhline(y=0, linewidth=3, color='red')
     plt.xlim(0, len(my_agent.deep_q.qvalue_evolution))
     if save_training_evaluation:
-        network_path = os.path.join('saved_networks', 'agent_{}_{}_{}_curve.png'.format(environment.name, agent.network, num_iterations))
+        network_path = os.path.join('saved_networks', 'agent_{}_{}_{}_curve.png'.format(environment.name, agent.network_name, num_iterations))
         plt.savefig(fname=network_path)
     plt.show()
 
@@ -94,10 +94,13 @@ if __name__ == "__main__":
     # Plot grid visualization
     # plot_grid_layout(env)
 
+    if not os.path.exists('saved_networks'):
+        os.mkdir('saved_networks')
+
     # Load an existing network
     # network_path = os.path.join('saved_networks', 'agent_{}_{}_{}.h5'.format(env.name, my_agent.network, 10000))
     network_path = os.path.join('saved_networks', 'IL_{}_{}.h5'.format('l2rpn', 9000))
-    my_agent.load_network(network_path)
+    # my_agent.load_network(network_path)
 
     # Train a new network
     train_agent(my_agent, env, num_iterations=2000)
