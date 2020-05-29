@@ -14,7 +14,7 @@ from grid2op.Reward import L2RPNReward
 path_grid = "l2rpn_2019"
 env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
 
-run_id = 0
+run_id = 1
 n = 10000
 num_states = env.get_obs().rho.shape[0]
 num_actions = env.action_space.size()
@@ -31,7 +31,7 @@ reset_count = 0
 start_time = time.time()
 
 for i in range(n):
-    print_progress(i, n, prefix='Sample {}/{}'.format(i, n), suffix='Episode count: {}'.format(reset_count))
+    print_progress(i+1, n, prefix='Sample {}/{}'.format(i+1, n), suffix='Episode count: {}'.format(reset_count))
     states[i] = env.get_obs().rho
     st = time.time()
 
@@ -43,7 +43,8 @@ for i in range(n):
         # print(act)
         # print(reward)
 
-    my_act = random.randrange(num_actions)
+    # my_act = random.randrange(num_actions)
+    my_act = np.argmax(rewards[i])
     obs, reward, done, _ = env.step(converter.convert_act(int(my_act)))
 
     # Reset environment when game over state is reached or max iterations is reached

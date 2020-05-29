@@ -16,31 +16,34 @@ def plot_state_prediction(state, reward):
     plt.show()
 
 
-BATCH_SIZE = 8
-NUM_EPISODES = 100
-run_id = 0
-n = 3000
+IL_LEARNING_RATE = 1e-3
+IL_BATCH_SIZE = 8
+NUM_EPISODES = 1000
+run_id = 1
+n = 10000
 num_states = 20
 num_actions = 76
-iterations = n // BATCH_SIZE + 1
-nn = DeepQ(num_actions, num_states)
+iterations = n // IL_BATCH_SIZE + 1
+nn = DeepQ(num_actions, num_states, lr=IL_LEARNING_RATE)
 
-states = np.load(os.path.join('generated_data', 'states_{}_{}_{}.npy'.format(n, num_states, 0)), allow_pickle=True)
-rewards = np.load(os.path.join('generated_data', 'rewards_{}_{}_{}.npy'.format(n, num_actions, 0)), allow_pickle=True)
+states = np.load(os.path.join('generated_data', 'states_{}_{}_{}.npy'.format(n, num_states, run_id)), allow_pickle=True)
+rewards = np.load(os.path.join('generated_data', 'rewards_{}_{}_{}.npy'.format(n, num_actions, run_id)), allow_pickle=True)
 
 loss = 0
 for episode in range(NUM_EPISODES):
     print_progress(episode, NUM_EPISODES, prefix='Episode {}/{}'.format(episode, NUM_EPISODES))
     for iteration in range(iterations):
-        start_index = iteration * BATCH_SIZE
-        end_index = start_index + BATCH_SIZE
+        start_index = iteration * IL_BATCH_SIZE
+        end_index = start_index + IL_BATCH_SIZE
         state_batch = states[start_index:end_index]
         target_batch = rewards[start_index:end_index]
         loss = nn.train_imitation(state_batch, target_batch)
 
 print("We had an imitation loss equal to ", loss)
-path = os.path.join('SavedNetworks', 'IL_l2rpn_{}.h5'.format(n))
-nn.save_network(path)
+network_path = os.path.join('saved_networks', 'IL_{}_{}_{}'.format('l2rpn_2019', n, run_id))
+if not os.path.exists(network_path):
+    os.mkdir(network_path)
+nn.save_network(os.path.join(network_path, 'network.h5'))
 
 # nn.load_network(path)
 plot_state_prediction(states[10], rewards[10])

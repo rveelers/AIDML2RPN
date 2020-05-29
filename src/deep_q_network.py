@@ -11,9 +11,10 @@ from hyper_parameters import DISCOUNT_RATE, TAU, LEARNING_RATE
 class DeepQ(object):
     """Constructs the desired deep q learning network"""
 
-    def __init__(self, action_size, observation_size):
+    def __init__(self, action_size, observation_size, lr=LEARNING_RATE):
         self.action_size = action_size
         self.observation_size = observation_size
+        self.lr = lr
         self.model = None
         self.target_model = None
         self.qvalue_evolution = []
@@ -33,9 +34,9 @@ class DeepQ(object):
         output = Dense(self.action_size)(layer4)
 
         self.model = Model(inputs=[input_layer], outputs=[output])
-        self.model.compile(loss='mse', optimizer=Adam(lr=LEARNING_RATE))
+        self.model.compile(loss='mse', optimizer=Adam(lr=self.lr))
         self.target_model = Model(inputs=[input_layer], outputs=[output])
-        self.target_model.compile(loss='mse', optimizer=Adam(lr=LEARNING_RATE))
+        self.target_model.compile(loss='mse', optimizer=Adam(lr=self.lr))
         self.target_model.set_weights(self.model.get_weights())
 
     def predict_movement(self, data, epsilon):
