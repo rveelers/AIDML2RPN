@@ -1,7 +1,5 @@
 import os
 import time
-
-import grid2viz
 import matplotlib.pyplot as plt
 from grid2op.Action import TopologyChangeAction
 
@@ -115,12 +113,12 @@ if __name__ == "__main__":
     # Initialize the environment and agent
     path_grid = "l2rpn_2019"
     # path_grid = grid_paths[0]
-    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    # env = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction)
+    # env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
+    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction)
     num_states = env.get_obs().rho.shape[0] + env.get_obs().line_status.shape[0]
     num_actions = env.action_space.size()
     print(num_states, num_actions)
-    my_agent = DeepQAgent(env.action_space, num_states, network=DeepQ, env=env)
+    my_agent = DeepQAgent(env.action_space, num_states, network=DeepQ)
     # my_agent = DoNothingAgent(env.action_space)
 
     # Plot grid visualization
