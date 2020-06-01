@@ -4,7 +4,7 @@ from grid2op.Agent import AgentWithConverter
 from grid2op.Converter import IdToAct
 
 from deep_q_network import DeepQ
-from hyper_parameters import BUFFER_SIZE, FINAL_EPSILON, INITIAL_EPSILON, EPSILON_DECAY, BATCH_SIZE, TRAIN_INTERVAL, \
+from hyper_parameters import BUFFER_SIZE, FINAL_EPSILON, INITIAL_EPSILON, BATCH_SIZE, TRAIN_INTERVAL, \
     REPLACE_TARGET_INTERVAL
 from progress_bar import print_progress
 from replay_buffer import ReplayBuffer

@@ -99,8 +99,8 @@ if __name__ == "__main__":
 
     # Load an existing network
     # network_path = os.path.join('saved_networks', 'agent_{}_{}_{}.h5'.format(env.name, my_agent.network, 10000))
-    network_path = os.path.join('saved_networks', 'IL_{}_{}.h5'.format('l2rpn', 9000))
-    # my_agent.load_network(network_path)
+    network_path = os.path.join('saved_networks', '{}_{}_IL'.format(env.name, 10000), 'network.h5')
+    my_agent.load_network(network_path)
 
     # Train a new network
     train_agent(my_agent, env, num_iterations=2000)
