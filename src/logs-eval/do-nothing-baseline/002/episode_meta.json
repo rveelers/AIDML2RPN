@@ -1,0 +1,9 @@
+{
+    "backend_type": "PandaPowerBackend_rte_case14_realistic_rte_case14_realistic",
+    "chronics_max_timestep": "8064",
+    "chronics_path": "C:\\Users\\johan\\data_grid2op\\rte_case14_realistic\\chronics\\002",
+    "cumulative_reward": 456701.34375,
+    "env_type": "Environment_rte_case14_realistic",
+    "grid_path": "C:\\Users\\johan\\data_grid2op\\rte_case14_realistic\\grid.json",
+    "nb_timestep_played": 388
+}

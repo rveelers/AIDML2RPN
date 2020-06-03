@@ -41,7 +41,7 @@ def evaluate(env,
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
     runner_params = env.get_params_for_runner()
-    runner_params["verbose"] = args.verbose
+    runner_params["verbose"] = verbose
 
     # Run
     # Create agent
@@ -62,9 +62,7 @@ def evaluate(env,
                     agentInstance=agent)
 
     # Print model summary
-    stringlist = []
-    agent.deep_q.model.summary(print_fn=lambda x: stringlist.append(x))
-    short_model_summary = "\n".join(stringlist)
+    short_model_summary = agent.deep_q.summary()
     print(short_model_summary)
 
     # Run
