@@ -34,6 +34,7 @@ def main():
     NUM_TRAIN_ITERATIONS = 100
     NUM_RUN_ITERATIONS = 100
     path_grid = 'rte_case14_realistic'
+    train_agent = False
 
     save_path = "saved_networks"
     logdir = 'logs'
@@ -49,13 +50,20 @@ def main():
     my_agent = SACAgent(action_space=env.action_space)
 
     # Train the agent
-    my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir)
+    if train_agent:
+        my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir)
+    else:
+        obs = env.reset()
+        transformed_obs = my_agent.convert_obs(obs)
+        my_agent.init_deep_q(transformed_obs)
+        # TODO: fix this ridiculous loading function
+        my_agent.deep_q.load_network(os.path.join(network_path, my_agent.name))
 
     # Print summary of networks in SAC
-    print('\nSummary of networks in the SAC agent:\n', my_agent.summary())
+    # print('\nSummary of networks in the SAC agent:\n', my_agent.summary())
 
     # Run the agent
-    run_agent(env, NUM_RUN_ITERATIONS, plot_replay_episodes=False)
+    run_agent(env, my_agent, NUM_RUN_ITERATIONS, plot_replay_episodes=True)
 
 
 if __name__ == "__main__":
