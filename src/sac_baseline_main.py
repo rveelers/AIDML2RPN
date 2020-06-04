@@ -1,5 +1,4 @@
 import os
-import time
 
 from grid2op.Plot import EpisodeReplay
 from grid2op.Action.TopologySetAction import TopologySetAction
@@ -8,13 +7,7 @@ from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
 from l2rpn_baselines.SAC.SAC import SAC
-
-
-def train_agent(agent, environment, network_path, num_iterations, logdir):
-    start = time.time()
-    agent.train(environment, num_iterations, network_path, logdir=logdir)
-    print("Training time:  ", time.time() - start)
-    # TODO: add plotting
+from sac_agent import
 
 
 def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True):
@@ -43,11 +36,13 @@ def main():
     NUM_TRAIN_ITERATIONS = 10000
     NUM_RUN_ITERATIONS = 10000
 
+    save_path = "saved_networks/Baselines/SAC"
+    load_path = save_path
+    logs_dir = os.path.join(save_path, 'logs')
+
     # Initialize the environment and agent
-    # path_grid = "l2rpn_2019"
     path_grid = 'rte_case14_realistic'
-    # env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    env = make(path_grid)
+    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
 
     # Create SAC agent
     my_agent = SAC(action_space=env.action_space)
@@ -57,11 +52,8 @@ def main():
     network_load_path = os.path.join(network_path, '_finished')
     my_agent.deep_q.load_network(network_load_path)
 
-    # Train a new network
-    # train_agent(my_agent, env, network_path, NUM_TRAIN_ITERATIONS, logdir=os.path.join(network_path, 'logs'))
+    my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir)
 
-    # Run the agent
-    run_agent(env, my_agent, NUM_RUN_ITERATIONS, plot_replay_episodes=False)
 
 if __name__ == "__main__":
     main()

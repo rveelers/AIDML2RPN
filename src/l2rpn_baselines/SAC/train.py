@@ -10,7 +10,9 @@
 
 import tensorflow as tf
 from l2rpn_baselines.utils import cli_train as cli
-from l2rpn_baselines.SAC.SAC import SAC, DEFAULT_NAME
+from l2rpn_baselines.SAC.SAC import SAC
+
+DEFAULT_NAME = "SoftActorCritic"
 
 
 def train(env,
