@@ -32,12 +32,12 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 def main():
     NUM_TRAIN_ITERATIONS = 100
-    NUM_RUN_ITERATIONS = 10000
+    NUM_RUN_ITERATIONS = 100
     path_grid = 'rte_case14_realistic'
 
     save_path = "saved_networks"
+    logdir = 'logs'
     network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, 'SACAgent', NUM_TRAIN_ITERATIONS))
-    logdir = os.path.join(network_path, 'logs')
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
@@ -51,7 +51,11 @@ def main():
     # Train the agent
     my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir)
 
-    print('Summary of networks in the SAC agent:\n', my_agent.summary())
+    # Print summary of networks in SAC
+    print('\nSummary of networks in the SAC agent:\n', my_agent.summary())
+
+    # Run the agent
+    run_agent(env, NUM_RUN_ITERATIONS, plot_replay_episodes=False)
 
 
 if __name__ == "__main__":

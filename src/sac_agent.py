@@ -4,8 +4,9 @@ from sac_network import SACNetwork
 
 class SACAgent(DeepQAgent):
 
-    # def __init__(self, action_space):
-    #     super().__init__(action_space)
+    def __init__(self, action_space):
+        super().__init__(action_space)
+        self.name = 'SACAgent'
 
     def init_deep_q(self, transformed_observation):
         self.deep_q = SACNetwork(self.action_space.size(),
