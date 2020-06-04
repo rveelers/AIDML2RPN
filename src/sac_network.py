@@ -23,30 +23,23 @@ class SACNetwork(SAC_NN):
                          training_param)
 
     def predict_movement(self, data, epsilon, batch_size=None):
+        """ (1) Change to stochastic policy """
         if batch_size is None:
             batch_size = data.shape[0]
-        rand_val = np.random.random(data.shape[0])
+
+        # Policy outputs a probability distribution over the actions
         p_actions = self.model_policy.predict(data, batch_size=batch_size)
 
-        # TODO: change to stochastic policy
-        opt_policy_orig = np.argmax(np.abs(p_actions), axis=-1)
-        opt_policy = 1.0 * opt_policy_orig
-        opt_policy[rand_val < epsilon] = np.random.randint(0, self.action_size, size=(np.sum(rand_val < epsilon)))
+        # create a distribution to sample from
+        m = tfp.distributions.Categorical(probs=p_actions)
 
-        # store the qvalue_evolution (lots of computation time maybe here)
-        # opt_policy_orig_ts = tf.convert_to_tensor(opt_policy_orig, dtype=tf.int32)
-        # tmp, previous_arange = self.get_eye_pm(data.shape[0])
-        # tmp[previous_arange, opt_policy_orig] = 1.0
-        # tmp_ts = tf.convert_to_tensor(tmp, dtype=tf.float32)
-        # q_actions0 = self.model_Q((data, tmp_ts)).numpy()
-        # q_actions2 = self.model_Q2((data, tmp_ts)).numpy()
-        # tmp[previous_arange, opt_policy_orig] = 0.0
-        #
-        # q_actions = np.fmin(q_actions0, q_actions2).reshape(-1)
-        # self.qvalue_evolution = np.concatenate((self.qvalue_evolution, q_actions))
-        # above is not mandatory for predicting a movement so, might need to be moved somewhere else...
-        opt_policy = opt_policy.astype(np.int)
-        return opt_policy, p_actions[:, opt_policy]
+        # sample action from distribution
+        action = m.sample()
+
+        # Get probability for the chosen action
+        prob = m.prob(action)
+        
+        return action, prob
 
     def train(self, s_batch, a_batch, r_batch, d_batch, s2_batch, tf_writer=None, batch_size=None):
         """Trains networks to fit given parameters"""
