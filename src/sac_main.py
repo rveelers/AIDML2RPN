@@ -7,6 +7,7 @@ from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
 from sac_agent import SACAgent
+from sac_training_param import TrainingParamSAC
 
 
 def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True):
@@ -51,7 +52,7 @@ def main():
 
     # Train the agent
     if train_agent:
-        my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir)
+        my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir, training_param=TrainingParamSAC())
     else:
         obs = env.reset()
         transformed_obs = my_agent.convert_obs(obs)
