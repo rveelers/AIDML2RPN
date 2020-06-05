@@ -11,7 +11,7 @@ class TrainingParamSAC(object):
     def __init__(self,
                  DECAY_RATE=0.9,
                  BUFFER_SIZE=40000,
-                 MINIBATCH_SIZE=64,
+                 MINIBATCH_SIZE=10,  # 64,
                  STEP_FOR_FINAL_EPSILON=100000,  # step at which min_espilon is obtain
                  MIN_OBSERVATION=100,  # 5000  NOTE: the training does not start before min_observation steps....
                  FINAL_EPSILON=1./(7*288.),  # have on average 1 random action per week of approx 7*288 time steps
@@ -33,3 +33,11 @@ class TrainingParamSAC(object):
         self.ALPHA = ALPHA
 
         self._exp_facto = np.log(self.INITIAL_EPSILON/self.FINAL_EPSILON)
+
+    def get_next_epsilon(self, current_step):
+        if current_step > self.STEP_FOR_FINAL_EPSILON:
+            res = self.FINAL_EPSILON
+        else:
+            # exponential decrease
+            res = self.INITIAL_EPSILON * np.exp(- (current_step / self.STEP_FOR_FINAL_EPSILON) * self._exp_facto )
+        return res
