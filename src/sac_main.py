@@ -31,10 +31,10 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 100
+    NUM_TRAIN_ITERATIONS = 1000
     NUM_RUN_ITERATIONS = 100
     path_grid = 'rte_case14_realistic'
-    train_agent = False
+    train_agent = True
 
     save_path = "saved_networks"
     logdir = 'logs'
