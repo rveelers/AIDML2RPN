@@ -5,3 +5,4 @@ src/Agents/
 src/saved_networks/
 src/logs
 src/logs-eval
+src/episode.gif
