@@ -65,9 +65,6 @@ class SACAgent(DeepQAgent):
             while training_step < iterations:
                 # reset or build the environment
                 initial_state = self._need_reset(env, training_step, epoch_num, done, new_state)
-                # NEW (Johan 2020-06-05): If this is not added, s == s2 always in the replay pool ...
-                initial_state = initial_state.copy()
-                # END NEW
 
                 # Slowly decay the exploration parameter epsilon
                 # if self.epsilon > training_param.FINAL_EPSILON:
@@ -101,6 +98,15 @@ class SACAgent(DeepQAgent):
                     = self._update_loop(done, temp_reward, temp_done, alive_frame, total_reward, reward, epoch_num)
 
                 # update the replay buffer
+                # NEW (Johan 2020-06-05): If the following line is not added, s == s2 always in the replay pool
+                new_state = new_state.copy()
+                # Adding the line above seems to be enough, but better safe than sorry. Let's also add:
+                initial_state = initial_state.copy()
+                pm_i.numpy().copy()
+                reward = reward.copy()
+                done = done.copy()
+                # for extra safety.
+                # END NEW
                 self._store_new_state(initial_state, pm_i, reward, done, new_state)
 
                 # now train the model
