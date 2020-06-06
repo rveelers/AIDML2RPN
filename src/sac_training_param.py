@@ -19,6 +19,8 @@ class TrainingParamSAC(object):
                  TAU=0.01,
                  ALPHA=1,
                  NUM_FRAMES=1,
+                 ALPHA_LR=3e-4,
+                 AUTOMATIC_ALPHA_TUNING=True
                  ):
 
         self.DECAY_RATE = DECAY_RATE
@@ -31,6 +33,8 @@ class TrainingParamSAC(object):
         self.TAU = TAU
         self.NUM_FRAMES = NUM_FRAMES
         self.ALPHA = ALPHA
+        self.ALPHA_LR = ALPHA_LR
+        self.AUTOMATIC_ALPHA_TUNING = AUTOMATIC_ALPHA_TUNING
 
         self._exp_facto = np.log(self.INITIAL_EPSILON/self.FINAL_EPSILON)
 

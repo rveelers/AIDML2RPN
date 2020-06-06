@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from numbers import Number
 
 from l2rpn_baselines.SAC.SAC_NN import SAC_NN
 # from l2rpn_baselines.utils import TrainingParam
@@ -35,6 +36,15 @@ class SACNetwork(SAC_NN):
                          learning_rate_decay_rate=learning_rate_decay_rate,
                          training_param=training_param)
 
+        # For automatic alpha/temperature tuning.
+        self._automatic_alpha_tuning = training_param.AUTOMATIC_ALPHA_TUNING
+        if self._automatic_alpha_tuning:
+            self._log_alpha = tf.Variable(0.0)
+            self._alpha = tfp.util.DeferredTensor(pretransformed_input=self._log_alpha, transform_fn=tf.exp)
+            self._alpha_lr = training_param.ALPHA_LR
+            self._alpha_optimizer = tf.optimizers.Adam(self._alpha_lr, name='alpha_optimizer')
+            self._target_entropy = None  # TODO
+
     def predict_movement(self, data, epsilon, batch_size=None):
         """ Change (1): Deterministic --> stochastic policy """
         if batch_size is None:
@@ -59,7 +69,7 @@ class SACNetwork(SAC_NN):
         if batch_size is None:
             batch_size = s_batch.shape[0]
         
-        # (1) training of the Q-function networks ######################################################################
+        # (1) training of the Q-FUNCTION networks ######################################################################
         # Save the graph just the first time
         if tf_writer is not None:
             tf.summary.trace_on()
@@ -83,8 +93,7 @@ class SACNetwork(SAC_NN):
         loss = self.model_Q.train_on_batch([s_batch, last_action], target)
         loss_2 = self.model_Q2.train_on_batch([s_batch, last_action], target)
 
-        # (2) training of the policy network ###########################################################################
-
+        # (2) training of the POLICY network ###########################################################################
         # Create a huge matrix of shape (batch_size*action_size, observation_size). It is essentially action_size copies
         # of s_batch stacked on top of each other.
         tiled_s_batch = np.tile(s_batch, (self.action_size, 1))
@@ -115,7 +124,10 @@ class SACNetwork(SAC_NN):
 
         # Set the temperature parameter
         self.life_spent += 1
-        temp = 1 / np.log(self.life_spent) / 2
+        if self._automatic_alpha_tuning:
+            temp = self._alpha
+        else:
+            temp = 1 / np.log(self.life_spent) / 2
 
         # Calculate a probability distribution over the actions (one distribution for every sample in the batch).
         # Here the temperature parameter comes into play!
@@ -125,7 +137,7 @@ class SACNetwork(SAC_NN):
         # The loss function used is the categorical cross-ENTROPY loss = - sum_a (new_proba(a) * log(policy(s, a))
         loss_policy = self.model_policy.train_on_batch(s_batch, new_proba_ts)
 
-        # (3) training of the value function network ###################################################################
+        # (3) training of the VALUE FUNCTION network ###################################################################
         target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
 
         # OLD:
@@ -140,6 +152,28 @@ class SACNetwork(SAC_NN):
 
         value_target_ts = tf.convert_to_tensor(value_target.reshape(-1, 1))
         loss_value = self.model_value.train_on_batch(s_batch, value_target_ts)
+
+        # (4) tune alpha/temperature parameter #########################################################################
+        # This is adapted from the softlearning GitHub-repo:
+        # https://github.com/rail-berkeley/softlearning/blob/master/softlearning/algorithms/sac.py
+        if self._automatic_alpha_tuning:
+            if not isinstance(self._target_entropy, Number):
+                self._target_entropy = 0.0
+
+            log_pis = np.log(new_proba[np.arange(batch_size), a_batch] + 1e-6)
+
+            with tf.GradientTape() as tape:
+                alpha_losses = -1.0 * (self._alpha * tf.stop_gradient(log_pis + self._target_entropy))
+                # NOTE(hartikainen): It's important that we take the average here,
+                # otherwise we end up effectively having `batch_size` times too
+                # large learning rate.
+                alpha_loss = tf.nn.compute_average_loss(alpha_losses)
+
+            alpha_gradients = tape.gradient(alpha_loss, [self._log_alpha])
+            self._alpha_optimizer.apply_gradients(zip(alpha_gradients, [self._log_alpha]))
+            if tf_writer is not None:
+                tf.summary.scalar("alpha/log_alpha", self._log_alpha, self.life_spent)
+                tf.summary.scalar("alpha/alpha", self._alpha, self.life_spent)
 
         self.Is_nan = np.isnan(loss) + np.isnan(loss_2) + np.isnan(loss_policy) + np.isnan(loss_value)
         return np.all(np.isfinite(loss)) & np.all(np.isfinite(loss_2)) & np.all(np.isfinite(loss_policy)) & \
