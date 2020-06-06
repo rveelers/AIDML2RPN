@@ -43,7 +43,9 @@ class SACNetwork(SAC_NN):
             self._alpha = tfp.util.DeferredTensor(pretransformed_input=self._log_alpha, transform_fn=tf.exp)
             self._alpha_lr = training_param.ALPHA_LR
             self._alpha_optimizer = tf.optimizers.Adam(self._alpha_lr, name='alpha_optimizer')
-            self._target_entropy = None  # TODO
+            # Set the target entropy according to the paper: "SOFT ACTOR-CRITIC FOR DISCRETE ACTION SETTINGS"
+            # https://arxiv.org/pdf/1910.07207.pdf
+            self._target_entropy = 0.98 * (-np.log(1.0/action_size))
 
     def predict_movement(self, data, epsilon, batch_size=None):
         """ Change (1): Deterministic --> stochastic policy """
