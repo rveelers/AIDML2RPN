@@ -13,7 +13,7 @@ class TrainingParamSAC(object):
                  BUFFER_SIZE=40000,
                  MINIBATCH_SIZE=10,  # 64,
                  STEP_FOR_FINAL_EPSILON=100000,  # step at which min_espilon is obtain
-                 MIN_OBSERVATION=100,  # 5000  NOTE: the training does not start before min_observation steps....
+                 MIN_OBSERVATION=20,  # 5000  NOTE: the training does not start before min_observation steps....
                  FINAL_EPSILON=1./(7*288.),  # have on average 1 random action per week of approx 7*288 time steps
                  INITIAL_EPSILON=0.4,
                  TAU=0.01,

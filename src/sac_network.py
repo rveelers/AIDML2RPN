@@ -58,49 +58,86 @@ class SACNetwork(SAC_NN):
         """Trains networks to fit given parameters"""
         if batch_size is None:
             batch_size = s_batch.shape[0]
-        target = np.zeros((batch_size, 1))
-        # training of the action state value networks
-        last_action = np.zeros((batch_size, self.action_size))
+        
+        # (1) training of the Q-function networks ######################################################################
         # Save the graph just the first time
         if tf_writer is not None:
             tf.summary.trace_on()
-        fut_action = self.model_value_target.predict(s2_batch, batch_size=batch_size).reshape(-1)
+        next_state_value = self.model_value_target.predict(s2_batch, batch_size=batch_size).reshape(-1)
         if tf_writer is not None:
             with tf_writer.as_default():
                 tf.summary.trace_export("model_value_target-graph", 0)
             tf.summary.trace_off()
 
-        target[:, 0] = r_batch + (1 - d_batch) * self.training_param.DECAY_RATE * fut_action
+        last_action = np.zeros((batch_size, self.action_size))
+        # NEW: (Johan 2020-06-06)
+        # Add information about which action was taken by setting last_action[batch_index, action(batch_index)] = 1
+        last_action[np.arange(batch_size), a_batch] = 1
+        # END NEW
+
+        # Bellman. The "target" for the Q networks is the expected reward = sum of immediate reward r_batch and the
+        # discounted value of the next state (predicted by the model_value_target network)
+        target = np.zeros((batch_size, 1))
+        target[:, 0] = r_batch + (1 - d_batch) * self.training_param.DECAY_RATE * next_state_value
+
         loss = self.model_Q.train_on_batch([s_batch, last_action], target)
         loss_2 = self.model_Q2.train_on_batch([s_batch, last_action], target)
 
+        # (2) training of the policy network ###########################################################################
+
+        # Create a huge matrix of shape (batch_size*action_size, observation_size). It is essentially action_size copies
+        # of s_batch stacked on top of each other.
+        tiled_s_batch = np.tile(s_batch, (self.action_size, 1))
+        tiled_s_batch_ts = tf.convert_to_tensor(tiled_s_batch)
+
+        # Create a huge matrix of shape (action_size*batch_size, action_size). It is NOT batch_size identity
+        # matrices stacked on top of each other, but rather something like: [1,0,0] (batch size times), [0,1,0,...]
+        # batch size time etc. Stored as a class/instance variable after it has been created the first time.
+        eye_train = self.get_eye_train(batch_size)
+
+        # Use the large tiled matrices above to do one big forward pass of the Q-networks. The result without reshaping
+        # is an array of shape (batch_size*action_size, 1), where the first batch_size elements are the Q-values for
+        # action a_0, etc. After reshaping, we get a matrix of shape (batch_size, action_size) filled with Q-values.
+        action_v1_orig = self.model_Q.predict([tiled_s_batch_ts, eye_train],
+                                              batch_size=batch_size).reshape(batch_size, -1)
+        action_v2_orig = self.model_Q2.predict([tiled_s_batch_ts, eye_train],
+                                               batch_size=batch_size).reshape(batch_size, -1)
+
+        # OLD:
+        # action_v1 = action_v1_orig - np.amax(action_v1_orig, axis=-1).reshape(batch_size, 1)
+        # NEW: (Johan 2020-06-06). Do the min{Q1, Q2} as specified in the paper?
+        action_v_min = np.fmin(action_v1_orig, action_v2_orig)
+        # END NEW
+
+        # Calculate the "advantage" of all actions as compared to the optimal (greedy) action. Advantage = Q(s,a) - V(s)
+        # (I have renamed action_v1 --> advantage). All advantage values are <= 0.
+        advantage = action_v_min - np.amax(action_v_min, axis=-1).reshape(batch_size, 1)
+
+        # Set the temperature parameter
         self.life_spent += 1
         temp = 1 / np.log(self.life_spent) / 2
-        tiled_batch = np.tile(s_batch, (self.action_size, 1))
-        tiled_batch_ts = tf.convert_to_tensor(tiled_batch)
-        # tiled_batch: output something like: batch, batch, batch
-        # TODO save that somewhere not to compute it each time, you can even save this in the
-        # TODO tensorflow graph!
-        tmp = self.get_eye_train(batch_size)
-        # tmp is something like [1,0,0] (batch size times), [0,1,0,...] batch size time etc.
 
-        action_v1_orig = self.model_Q.predict([tiled_batch_ts, tmp], batch_size=batch_size).reshape(batch_size, -1)
-        action_v2_orig = self.model_Q2.predict([tiled_batch_ts, tmp], batch_size=batch_size).reshape(batch_size, -1)
-        action_v1 = action_v1_orig - np.amax(action_v1_orig, axis=-1).reshape(batch_size, 1)
-        new_proba = np.exp(action_v1 / temp) / np.sum(np.exp(action_v1 / temp), axis=-1).reshape(batch_size, 1)
+        # Calculate a probability distribution over the actions (one distribution for every sample in the batch).
+        # Here the temperature parameter comes into play!
+        new_proba = np.exp(advantage / temp) / np.sum(np.exp(advantage / temp), axis=-1).reshape(batch_size, 1)
         new_proba_ts = tf.convert_to_tensor(new_proba)
+
+        # The loss function used is the categorical cross-ENTROPY loss = - sum_a (new_proba(a) * log(policy(s, a))
         loss_policy = self.model_policy.train_on_batch(s_batch, new_proba_ts)
 
-        # training of the value_function
-        # if tf_writer is not None:
-        #     tf.summary.trace_on()
+        # (3) training of the value function network ###################################################################
         target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
-        # if tf_writer is not None:
-        #     with tf_writer.as_default():
-        #         tf.summary.trace_export("model_policy-graph", 0)
-        #     tf.summary.trace_off()
-        value_target = np.fmin(action_v1_orig[0, a_batch], action_v2_orig[0, a_batch]) - np.sum(
-            target_pi * np.log(target_pi + 1e-6))
+
+        # OLD:
+        # value_target = np.fmin(action_v1_orig[0, a_batch], action_v2_orig[0, a_batch]) - np.sum(
+        #      target_pi * np.log(target_pi + 1e-6))
+        # NEW: (Johan 2020-06-06)
+        # With the above implementation, only Q-values for the FIRST state in the batch is used.
+        action_values_Q1 = action_v1_orig[np.arange(batch_size), a_batch]
+        action_values_Q2 = action_v2_orig[np.arange(batch_size), a_batch]
+        value_target = np.fmin(action_values_Q1, action_values_Q2) - np.sum(target_pi * np.log(target_pi + 1e-6))
+        # END NEW
+
         value_target_ts = tf.convert_to_tensor(value_target.reshape(-1, 1))
         loss_value = self.model_value.train_on_batch(s_batch, value_target_ts)
 

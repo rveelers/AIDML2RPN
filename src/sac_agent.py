@@ -13,6 +13,7 @@ class SACAgent(DeepQAgent):
     def __init__(self, action_space):
         super().__init__(action_space)
         self.name = 'SACAgent'
+        # Number of environments ...
         self.__nb_env = 1  # TODO: understand why this must be added, as it seems to be part of super().__init__?
 
     def init_deep_q(self, transformed_observation):
