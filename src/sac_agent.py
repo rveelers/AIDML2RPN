@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 from l2rpn_baselines.utils import DeepQAgent
 from sac_network import SACNetwork
+from sac_network_discrete import SACNetworkDiscrete
 from sac_training_param import TrainingParamSAC
 
 
@@ -39,8 +40,7 @@ class SACAgent(DeepQAgent):
             os.makedirs(save_path, exist_ok=True)
 
         if logdir is not None:
-            logpath = os.path.join(logdir, self.name)
-            self.tf_writer = tf.summary.create_file_writer(logpath, name=self.name)
+            self.tf_writer = tf.summary.create_file_writer(logdir, name=self.name)
         else:
             logpath = None
             self.tf_writer = None
@@ -111,10 +111,11 @@ class SACAgent(DeepQAgent):
                 self._store_new_state(initial_state, pm_i, reward, done, new_state)
 
                 # now train the model
-                if not self._train_model(training_param, training_step):
-                    # infinite loss in this case
-                    print("ERROR INFINITE LOSS")
-                    break
+                if training_step % self.training_param.NUM_FRAMES == 0:
+                    if not self._train_model(training_param, training_step):
+                        # infinite loss in this case
+                        print("ERROR INFINITE LOSS")
+                        break
 
                 # Save the network every 1000 iterations
                 if training_step % SAVING_NUM == 0 or training_step == iterations - 1:
@@ -131,3 +132,34 @@ class SACAgent(DeepQAgent):
 
     def summary(self):
         return self.deep_q.summary()
+
+
+class SACAgentDiscrete(SACAgent):
+    def __init__(self, action_space):
+        super().__init__(action_space)
+        self.name = 'SACAgentDiscrete'
+
+    def init_deep_q(self, transformed_observation):
+        self.deep_q = SACNetworkDiscrete(self.action_space.size(),
+                                         observation_size=transformed_observation.shape[-1],
+                                         lr=self.lr,
+                                         learning_rate_decay_rate=self.learning_rate_decay_rate,
+                                         learning_rate_decay_steps=self.learning_rate_decay_steps)
+
+    def _train_model(self, training_param, training_step):
+        losses_are_all_finite = True
+
+        if training_step > max(training_param.MIN_OBSERVATION, training_param.MINIBATCH_SIZE):
+            # Get batch of training samples from buffer
+            s_batch, a_batch, r_batch, d_batch, s2_batch = self.replay_buffer.sample(training_param.MINIBATCH_SIZE)
+
+            # Train on batch
+            losses_are_all_finite = self.deep_q.train(s_batch, a_batch, r_batch, d_batch, s2_batch, self.tf_writer)
+
+            # save learning rate for later
+            self.train_lr = self.deep_q.optimizer_Q._decayed_lr('float32').numpy()
+
+            # Update target Q networks
+            self.deep_q.target_train()
+
+        return losses_are_all_finite

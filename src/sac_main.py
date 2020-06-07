@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 from grid2op.Plot import EpisodeReplay
 from grid2op.Action.TopologySetAction import TopologySetAction
@@ -6,7 +7,7 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-from sac_agent import SACAgent
+from sac_agent import SACAgent, SACAgentDiscrete
 from sac_training_param import TrainingParamSAC
 
 
@@ -37,18 +38,19 @@ def main():
     path_grid = 'rte_case14_realistic'
     train_agent = True
 
+    # Initialize the environment and agent
+    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
+    my_agent = SACAgentDiscrete(action_space=env.action_space)
+
     save_path = "saved_networks"
-    logdir = 'logs'
-    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, 'SACAgent', NUM_TRAIN_ITERATIONS))
+    logdir = os.path.join('logs', my_agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
+
+    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, 'SACAgentDiscrete', NUM_TRAIN_ITERATIONS))
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
     if not os.path.exists(logdir):
         os.mkdir(logdir)
-
-    # Initialize the environment and agent
-    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    my_agent = SACAgent(action_space=env.action_space)
 
     # Train the agent
     if train_agent:
@@ -57,8 +59,7 @@ def main():
         obs = env.reset()
         transformed_obs = my_agent.convert_obs(obs)
         my_agent.init_deep_q(transformed_obs)
-        # TODO: fix this ridiculous loading function
-        my_agent.deep_q.load_network(os.path.join(network_path, my_agent.name))
+        my_agent.deep_q.load_network(network_path)
 
     # Print summary of networks in SAC
     # print('\nSummary of networks in the SAC agent:\n', my_agent.summary())

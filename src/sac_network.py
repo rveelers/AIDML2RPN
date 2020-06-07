@@ -4,19 +4,10 @@ import tensorflow_probability as tfp
 from numbers import Number
 
 from l2rpn_baselines.SAC.SAC_NN import SAC_NN
+from l2rpn_baselines.utils import BaseDeepQ
 # from l2rpn_baselines.utils import TrainingParam
 
 from sac_training_param import TrainingParamSAC
-
-
-# TODO: how to pass training_params to this network?
-# I want to use my "own" class TrainingParamSAC from sac_training_param. However, TrainingParam from
-# l2rpn_baselines.utils seems to be used even though I pass TrainingParamSAC to the super()__init__() ??
-
-# Specifically, when I call my_agent.train(...) on the SACAgent object (my_agent), the train function from
-# DeepQAgent is called. On line 247 in DeepAgent, there is a check:
-#      if training_step > max(training_param.MIN_OBSERVATION, training_param.MINIBATCH_SIZE):
-# Since MIN_OBSERVATION is set to 5000 in the baselines, the training loop is not entered until step 5000 ...
 
 
 class SACNetwork(SAC_NN):
@@ -45,7 +36,7 @@ class SACNetwork(SAC_NN):
             self._alpha_optimizer = tf.optimizers.Adam(self._alpha_lr, name='alpha_optimizer')
             # Set the target entropy according to the paper: "SOFT ACTOR-CRITIC FOR DISCRETE ACTION SETTINGS"
             # https://arxiv.org/pdf/1910.07207.pdf
-            self._target_entropy = 0.98 * (-np.log(1.0/action_size))
+            self._target_entropy = 0.98 * (-np.log(1.0 / action_size))
 
     def predict_movement(self, data, epsilon, batch_size=None):
         """ Change (1): Deterministic --> stochastic policy """
@@ -70,7 +61,7 @@ class SACNetwork(SAC_NN):
         """Trains networks to fit given parameters"""
         if batch_size is None:
             batch_size = s_batch.shape[0]
-        
+
         # (1) training of the Q-FUNCTION networks ######################################################################
         # Save the graph just the first time
         if tf_writer is not None:
@@ -166,9 +157,8 @@ class SACNetwork(SAC_NN):
 
             with tf.GradientTape() as tape:
                 alpha_losses = -1.0 * (self._alpha * tf.stop_gradient(log_pis + self._target_entropy))
-                # NOTE(hartikainen): It's important that we take the average here,
-                # otherwise we end up effectively having `batch_size` times too
-                # large learning rate.
+                # NOTE(hartikainen): It's important that we take the average here, otherwise we end up effectively
+                # having `batch_size` times too large learning rate.
                 alpha_loss = tf.nn.compute_average_loss(alpha_losses)
 
             alpha_gradients = tape.gradient(alpha_loss, [self._log_alpha])
@@ -192,3 +182,5 @@ class SACNetwork(SAC_NN):
 
         short_model_summary = "\n".join(stringlist)
         return short_model_summary
+
+
