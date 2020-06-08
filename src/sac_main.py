@@ -40,7 +40,7 @@ def main():
 
     # Initialize the environment and agent
     env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    my_agent = SACBaselineAgent(action_space=env.action_space)
+    my_agent = SACAgentDiscrete(action_space=env.action_space)
 
     save_path = "saved_networks"
     logdir = os.path.join('logs', my_agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
