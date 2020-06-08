@@ -55,14 +55,14 @@ class SACNetworkDiscrete(BaseDeepQ):
         self.previous_eyes_train = None
 
         # For automatic alpha/temperature tuning.
-        self._alpha = tf.Variable(0.1)
+        self._alpha = tf.Variable(0.05)
         self._automatic_alpha_tuning = training_param.AUTOMATIC_ALPHA_TUNING
         if self._automatic_alpha_tuning:
             self._alpha_lr = training_param.ALPHA_LR
             self._alpha_optimizer = tf.optimizers.Adam(self._alpha_lr, name='alpha_optimizer')
             # Set the target entropy according to the paper: "SOFT ACTOR-CRITIC FOR DISCRETE ACTION SETTINGS"
             # https://arxiv.org/pdf/1910.07207.pdf
-            self._target_entropy = -0.98 * (np.log(action_size))
+            self._target_entropy = 0.98 * (np.log(action_size))
 
         # Deques for calculating moving averages of losses
         self.Q_loss_30 = deque(maxlen=30)
@@ -248,7 +248,7 @@ class SACNetworkDiscrete(BaseDeepQ):
         log_pis = np.log(action_probabilities[np.arange(batch_size), a_batch] + 1e-6)
 
         with tf.GradientTape() as tape:
-            alpha_losses = -1.0 * (self._alpha * tf.stop_gradient(log_pis + self._target_entropy))
+            alpha_losses = -1.0 * (self._alpha * log_pis) + self._target_entropy
             alpha_loss = tf.math.reduce_mean(alpha_losses)
 
         alpha_gradients = tape.gradient(alpha_loss, [self._alpha])

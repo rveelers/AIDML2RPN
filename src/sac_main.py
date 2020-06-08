@@ -7,7 +7,7 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-from sac_agent import SACAgent, SACAgentDiscrete
+from sac_agent import SACAgent, SACAgentDiscrete, SACBaselineAgent
 from sac_training_param import TrainingParamSAC
 
 
@@ -33,24 +33,24 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 100000
+    NUM_TRAIN_ITERATIONS = 10000
     NUM_RUN_ITERATIONS = 1000
     path_grid = 'rte_case14_realistic'
     train_agent = True
 
     # Initialize the environment and agent
     env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    my_agent = SACAgentDiscrete(action_space=env.action_space)
+    my_agent = SACBaselineAgent(action_space=env.action_space)
 
     save_path = "saved_networks"
     logdir = os.path.join('logs', my_agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
 
-    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, 'SACAgentDiscrete', NUM_TRAIN_ITERATIONS))
+    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, my_agent.name, NUM_TRAIN_ITERATIONS))
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
     if not os.path.exists(logdir):
-        os.mkdir(logdir)
+        os.mkdir(logdir)  # TODO
 
     # Train the agent
     if train_agent:
@@ -65,8 +65,12 @@ def main():
     # print('\nSummary of networks in the SAC agent:\n', my_agent.summary())
 
     # Run the agent
-    run_agent(env, my_agent, NUM_RUN_ITERATIONS, plot_replay_episodes=True)
-
+    # run_agent(env, my_agent, NUM_RUN_ITERATIONS, plot_replay_episodes=True)
+    for i in range(10):
+        obs = env.get_obs()
+        act = env.step(my_agent.act(observation=obs, reward=0))
+        print(act)
+    env.close()
 
 if __name__ == "__main__":
     main()
