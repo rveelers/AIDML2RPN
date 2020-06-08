@@ -4,24 +4,32 @@ import time
 import numpy as np
 
 from copy import deepcopy
+
+from grid2op.Action import TopologySetAction
+
+from l2rpn_baselines.DeepQSimple import DeepQSimple
+
 from progress_bar import print_progress
 
 from grid2op import make
-from grid2op.Action import TopologySetAction
 from grid2op.Converter import IdToAct
 from grid2op.Reward import L2RPNReward
 
 path_grid = "l2rpn_2019"
 env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
+# env = make(path_grid, reward_class=L2RPNReward)
+obs = env.reset()
+my_agent = DeepQSimple(env.action_space)
+my_agent.init_deep_q(my_agent.convert_obs(obs))
 
-run_id = 0
+run_id = 1
 n = 1000
-num_states = env.get_obs().rho.shape[0] + env.get_obs().line_status.shape[0] + env.get_obs().topo_vect.shape[0]
+# num_states = env.get_obs().rho.shape[0] + env.get_obs().line_status.shape[0] + env.get_obs().topo_vect.shape[0]
+num_states = my_agent.convert_obs(obs).shape[1]
 num_actions = env.action_space.size()
 print('State space size:', num_states)
 print('Action space size:', num_actions)
 
-obs = env.reset()
 converter = IdToAct(env.action_space)
 converter.init_converter()
 states = np.zeros((n, num_states))
@@ -32,7 +40,8 @@ start_time = time.time()
 
 for i in range(n):
     print_progress(i+1, n, prefix='Sample {}/{}'.format(i+1, n), suffix='Episode count: {}'.format(reset_count))
-    states[i] = np.concatenate((env.get_obs().rho, env.get_obs().line_status, env.get_obs().topo_vect))
+    # states[i] = np.concatenate((env.get_obs().rho, env.get_obs().line_status, env.get_obs().topo_vect))
+    states[i] = my_agent.convert_obs(obs)
     st = time.time()
 
     for act_id in range(env.action_space.size()):
