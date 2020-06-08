@@ -260,11 +260,10 @@ class SACBaselineAgent(SAC):
                 self._store_new_state(initial_state, pm_i, reward, done, new_state)
 
                 # now train the model
-                if training_step % self.training_param.NUM_FRAMES == 0:
-                    if not self._train_model(training_param, training_step):
-                        # infinite loss in this case
-                        print("ERROR INFINITE LOSS")
-                        break
+                if not self._train_model(training_param, training_step):
+                    # infinite loss in this case
+                    print("ERROR INFINITE LOSS")
+                    break
 
                 # Save the network every 1000 iterations
                 if training_step % SAVING_NUM == 0 or training_step == iterations - 1:
