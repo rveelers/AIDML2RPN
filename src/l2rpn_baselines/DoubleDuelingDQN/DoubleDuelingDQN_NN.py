@@ -105,7 +105,7 @@ class DoubleDuelingDQN_NN(object):
         
     def predict_move(self, data):
         model_input = data.reshape(1, self.observation_size * self.num_frames)
-        q_actions = self.model.predict(model_input, batch_size = 1)
+        q_actions = self.model.predict(model_input, batch_size = 1)     
         opt_policy = np.argmax(q_actions)
 
         return opt_policy, q_actions[0]

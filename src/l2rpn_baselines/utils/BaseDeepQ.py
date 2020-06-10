@@ -97,15 +97,6 @@ class BaseDeepQ(object):
         loss = self.model.train_on_batch(s_batch, targets_ts)
         return loss
 
-    def train_imitation(self, s_batch, t_batch):
-        """ Trains network on generated data: Imitation Learning. """
-        loss = self.model.train_on_batch(s_batch, t_batch)
-        return loss
-
-    def predict_rewards(self, data):
-        q_actions = self.model.predict(data.reshape(1, self.observation_size), batch_size=1)
-        return q_actions[0]
-
     @staticmethod
     def _get_path_model(path, name=None):
         if name is None:

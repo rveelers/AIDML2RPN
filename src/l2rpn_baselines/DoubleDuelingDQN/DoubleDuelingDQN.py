@@ -33,7 +33,7 @@ UPDATE_TARGET_SOFT_TAU = -1
 
 class DoubleDuelingDQN(AgentWithConverter):
     def __init__(self,
-                 observation_size,
+                 observation_space,
                  action_space,
                  name=__name__,
                  num_frames=4,
@@ -43,7 +43,7 @@ class DoubleDuelingDQN(AgentWithConverter):
         # Call parent constructor
         AgentWithConverter.__init__(self, action_space,
                                     action_space_converter=IdToAct)
-        # self.obs_space = observation_space
+        self.obs_space = observation_space
         
         # Store constructor params
         self.name = name
@@ -68,7 +68,7 @@ class DoubleDuelingDQN(AgentWithConverter):
         self.epsilon = 0.0
 
         # Compute dimensions from intial spaces
-        self.observation_size = observation_size
+        self.observation_size = self.obs_space.size_obs()
         self.action_size = self.action_space.size()
 
         # Load network graph
@@ -81,9 +81,6 @@ class DoubleDuelingDQN(AgentWithConverter):
         # Setup training vars if needed
         if self.is_training:
             self._init_training()
-
-        # Own attributes
-        self.id = None
 
     def _init_training(self):
         self.epsilon = INITIAL_EPSILON
@@ -151,9 +148,9 @@ class DoubleDuelingDQN(AgentWithConverter):
         with open(hp_path, 'w') as fp:
             json.dump(hp, fp=fp, indent=2)
 
-    @staticmethod
-    def get_converted_obs(observation):
-        li_vect = []
+    ## Agent Interface
+    def convert_obs(self, observation):
+        li_vect=  []
         for el in observation.attr_list_vect:
             v = observation._get_array_from_attr_name(el).astype(np.float32)
             v_fix = np.nan_to_num(v)
@@ -164,21 +161,6 @@ class DoubleDuelingDQN(AgentWithConverter):
                 v_res = v_fix
             li_vect.append(v_res)
         return np.concatenate(li_vect)
-
-    ## Agent Interface
-    def convert_obs(self, observation):
-        return DoubleDuelingDQN.get_converted_obs(observation)
-        # li_vect=  []
-        # for el in observation.attr_list_vect:
-        #     v = observation._get_array_from_attr_name(el).astype(np.float32)
-        #     v_fix = np.nan_to_num(v)
-        #     v_norm = np.linalg.norm(v_fix)
-        #     if v_norm > 1e6:
-        #         v_res = (v_fix / v_norm) * 10.0
-        #     else:
-        #         v_res = v_fix
-        #     li_vect.append(v_res)
-        # return np.concatenate(li_vect)
 
     def convert_act(self, action):
         return super().convert_act(action)
