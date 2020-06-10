@@ -5,20 +5,22 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from numbers import Number
 from collections import deque
-import warnings
 
+import warnings
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
     from tensorflow.keras.models import load_model, Model
     from tensorflow.keras.layers import Activation, Dense
     from tensorflow.keras.layers import Input, Concatenate
 
-from l2rpn_baselines.utils import BaseDeepQ
+from l2rpn_baselines.utils import BaseDeepQ  # Baseline Q network.
 from sac_training_param import TrainingParamSAC
 
 
 class SACNetwork(BaseDeepQ):
-
+    """ Extension of BaseDeepQ network with many changes (by overwriting functions). """
+    # TODO: Should all networks have the same optimizer learning rate/decay?
+    # TODO: change trining function according to the non-stochastic policy (take argmax)...
     def __init__(self,
                  action_size,
                  observation_size,
@@ -45,16 +47,17 @@ class SACNetwork(BaseDeepQ):
         self.schedule_lr_Q2, self.optimizer_Q2 = self.make_optimiser()
         self.schedule_lr_policy, self.optimizer_policy = self.make_optimiser()
 
+        # Define and compile the networks (with the optimizers above)
         self.construct_q_network()
 
-        # Used in the get_eye functions
+        # These are used in the get_eye functions
         self.previous_size = 0
         self.previous_eyes = None
         self.previous_arange = None
         self.previous_size_train = 0
         self.previous_eyes_train = None
 
-        # For automatic alpha/temperature tuning.
+        # For automatic alpha/temperature tuning.  # TODO remove this?
         self._alpha = tf.Variable(0.05)
         self._automatic_alpha_tuning = training_param.AUTOMATIC_ALPHA_TUNING
         if self._automatic_alpha_tuning:
@@ -71,6 +74,7 @@ class SACNetwork(BaseDeepQ):
         self.alpha_loss_30 = deque(maxlen=30)
 
     def construct_q_network(self):
+        """ Essentially copied (but cleaned up) from SAC_NN"""
         # construct double Q networks
         self.model_Q = self._build_q_NN()
         self.model_Q2 = self._build_q_NN()
@@ -94,6 +98,7 @@ class SACNetwork(BaseDeepQ):
         print("Successfully constructed networks.")
 
     def _build_q_NN(self):
+        """ Build Q networks as in the baseline SAC """
         input_states = Input(shape=(self.observation_size))
         input_action = Input(shape=(self.action_size))
         input_layer = Concatenate()([input_states, input_action])
@@ -113,7 +118,7 @@ class SACNetwork(BaseDeepQ):
         return model
 
     def _build_policy_NN(self):
-        # proba of choosing action a depending on policy pi
+        """ Build policy network as in the baseline SAC """
         input_states = Input(shape=(self.observation_size,))
 
         lay1 = Dense(self.observation_size)(input_states)
@@ -130,7 +135,7 @@ class SACNetwork(BaseDeepQ):
         return model_policy
 
     def predict_movement_stochastic(self, data, epsilon, batch_size=None):
-        """ This function is not used. Deterministic --> stochastic policy """
+        """ This function is not used. Deterministic --> stochastic policy """  # TODO remove?
         if batch_size is None:
             batch_size = data.shape[0]
         # Policy outputs a probability distribution over the actions
@@ -144,21 +149,22 @@ class SACNetwork(BaseDeepQ):
         return action, prob
 
     def predict_movement(self, data, epsilon, batch_size=None):
-        """ Predict movement as written in the SAC baseline. Not changed. """
+        """ Predict movement as written in the SAC baseline. Not changed, but added comments. """
         if batch_size is None:
             batch_size = data.shape[0]
         rand_val = np.random.random(data.shape[0])
+
         # Policy outputs a probability distribution over the actions
         p_actions = self.model_policy.predict(data, batch_size=batch_size)
+
         # Choose the action with the highest probability
         opt_policy_orig = np.argmax(np.abs(p_actions), axis=-1)
         opt_policy = 1.0 * opt_policy_orig
-        # Opt_policy is the "optimal policy" for each sample in batch. With epsilon probability, make actions random
-        # instead
+
+        # With epsilon probability, make actions random instead of using suggestion from policy network
         opt_policy[rand_val < epsilon] = np.random.randint(0, self.action_size, size=(np.sum(rand_val < epsilon)))
         opt_policy = opt_policy.astype(np.int)
-        a = p_actions[:, opt_policy]
-        print(a)
+
         return opt_policy, p_actions[:, opt_policy]
 
     def get_eye_pm(self, batch_size):
@@ -183,7 +189,7 @@ class SACNetwork(BaseDeepQ):
         if batch_size is None:
             batch_size = s_batch.shape[0]
 
-        self.life_spent += 1  # increase counter
+        self.life_spent += 1  # increase counter = number of optimizer steps + 1
 
         # (1) training of the Q-FUNCTION networks ######################################################################
         # Calculate losses and do one optimizer step each for Q and Q2 networks
@@ -261,7 +267,7 @@ class SACNetwork(BaseDeepQ):
         next_action_values = np.fmin(next_action_values_Q1, next_action_values_Q2)
 
         target_pi = self.model_policy.predict(s2_batch, batch_size=batch_size)
-
+        # TODO: change this if deterministic policy!!
         next_action_values = target_pi * (next_action_values - self._alpha * np.log(target_pi + 1e-6))
         next_state_value = np.sum(next_action_values, axis=-1)  # Sum over the actions (not over the batch)
 
