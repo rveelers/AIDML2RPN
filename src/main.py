@@ -1,5 +1,7 @@
 import os
 import time
+from copy import deepcopy
+
 import matplotlib.pyplot as plt
 from grid2op.Action import TopologyChangeAction
 
@@ -10,10 +12,11 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-# All available grids, if it gives an error remove the test=True flag in the make command
+from double_dueling_dqn import DoubleDuelingAgent
 from deep_q_agent import DeepQAgent
 from split_agent import SplitAgent
 
+# All available grids, if it gives an error remove the test=True flag in the make command
 grid_paths = [
     "rte_case5_example",
     "rte_case14_test",
@@ -53,7 +56,7 @@ def train_agent(agent, environment, num_iterations):
     network_path = os.path.join('saved_networks', agent.id)
     log_path = os.path.join('logs', agent.id)
     start = time.time()
-    agent.train(environment, num_iterations, network_path, log_path)
+    agent.train(environment, num_iterations, network_path, logdir=log_path)
     print("Training time:  ", time.time() - start)
 
 
@@ -85,13 +88,31 @@ def run_agent(environment, agent, num_iterations, plot_replay_episodes=True, use
         cum_reward = 0.
         done = False
         for i in range(num_iterations):
-            # plot_grid_observation(environment)
             act = agent.my_act(agent.convert_obs(obs), reward, done)
-            # act = agent.act(obs, reward, done)
             obs, reward, done, _ = environment.step(agent.convert_act(act))
-            # obs, reward, done, _ = environment.step(act)
             cum_reward += reward
 
+            if len(agent.action_history) < 2 or agent.action_history[-2] != act:
+                print('In iteration', i, 'action', act)
+                print(agent.convert_act(act))
+                # plot_grid_observation(environment)
+
+            # import numpy as np
+            # predicted_rewards = agent.deep_q.predict_rewards(agent.convert_obs(obs))
+            # expected_rewards = []
+            # for action in range(agent.action_space.size()):
+            #     _, expected_reward, _, _ = obs.simulate(agent.convert_act(action))
+            #     expected_rewards.append(expected_reward)
+            #
+            # predicted_rewards = (predicted_rewards - min(predicted_rewards)) / (max(predicted_rewards) - min(predicted_rewards))
+            # expected_rewards = np.array(expected_rewards) / max(expected_rewards)
+            #
+            # plt.plot(expected_rewards)
+            # plt.plot(predicted_rewards)
+            # plt.show()
+
+            # print(act, reward)
+            # plot_grid_observation(environment)
             if done:
                 break
 
@@ -108,17 +129,18 @@ if __name__ == "__main__":
     # env = make(path_grid, reward_class=L2RPNReward)
 
     # my_agent = DoNothingAgent(env.action_space)
-    # my_agent = DoubleDuelingDQN(num_states, env.action_space, is_training=True)
+    # num_states = DoubleDuelingAgent.get_converted_obs(env.reset()).shape[0]
+    # my_agent = DoubleDuelingAgent(num_states, env.action_space, is_training=False)
     my_agent = DeepQAgent(env.action_space, store_action=True)
     # my_agent = SAC(env.action_space, store_action=True)
     # my_agent = SplitAgent(env.action_space)
 
-    # num_states = my_agent.convert_obs(env.reset()).shape[1]
+    num_states = my_agent.convert_obs(env.reset()).shape[1]
     num_actions = env.action_space.size()
-    num_training_iterations = 100000
+    num_training_iterations = 10000
     num_run_iterations = 1000
 
-    # print('State space size:', num_states)
+    print('State space size:', num_states)
     print('Action space size:', num_actions)
     print('Training iterations:', num_training_iterations)
     print('Run iterations:', num_run_iterations)
@@ -128,13 +150,19 @@ if __name__ == "__main__":
 
     # Load an existing network
     # my_agent.id = '{}_{}_{}'.format(path_grid, my_agent.__class__.__name__, num_training_iterations)
-    # agent_id = 'IL_{}_{}_{}'.format(path_grid, my_agent.__class__.__name__, num_training_iterations)
     # my_agent.init_deep_q(my_agent.convert_obs(env.reset()))
     # my_agent.load(os.path.join('saved_networks', my_agent.id))
+
+    # Load Imitation Learning network
+    # num_samples = 1000
+    # run_id = 0
+    # il_network_path = '{}_{}_{}_IL'.format(path_grid, num_samples, run_id)
+    # my_agent.init_deep_q(my_agent.convert_obs(env.reset()))
+    # my_agent.load(os.path.join('saved_networks', il_network_path), name=il_network_path)
 
     # Train a new network
     my_agent.id = '{}_{}_{}'.format(path_grid, my_agent.__class__.__name__, num_training_iterations)
     train_agent(my_agent, env, num_iterations=num_training_iterations)
 
     # Run the agent
-    # run_agent(env, my_agent, num_iterations=num_run_iterations, plot_replay_episodes=True, use_runner=False)
+    run_agent(env, my_agent, num_iterations=num_run_iterations, plot_replay_episodes=True, use_runner=False)

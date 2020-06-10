@@ -9,8 +9,6 @@
 import os
 import numpy as np
 from abc import abstractmethod
-
-from l2rpn_baselines.DeepQSimple.DeepQ_NN import DeepQ_NN
 from tqdm import tqdm
 import tensorflow as tf
 
@@ -58,51 +56,39 @@ class DeepQAgent(AgentWithConverter):
         self.train_lr = lr
         self.epsilon = 1.0
 
-        # Own attributes
-        self.id = None
-        self.step_run_count = 0
-        self.tf_run_writer = None
-        self.action_history = []
-        self.reward_history = []
-
         self.obs_as_vect = None
         self._tmp_obs = None
         self.reset_num = None
 
+    @abstractmethod
     def init_deep_q(self, transformed_observation):
-        self.deep_q = DeepQ_NN(self.action_space.size(),
-                               observation_size=transformed_observation.shape[-1],
-                               lr=self.lr,
-                               learning_rate_decay_rate=self.learning_rate_decay_rate,
-                               learning_rate_decay_steps=self.learning_rate_decay_steps)
+        pass
 
     # grid2op.Agent interface
     def convert_obs(self, observation):
         if self._tmp_obs is None:
-            tmp = np.concatenate((
-                                  # observation.prod_p,
-                                  # observation.load_p,
-                                  observation.rho,
-                                  observation.timestep_overflow,
-                                  observation.line_status,
-                                  observation.topo_vect,
-                                  observation.time_before_cooldown_line,
-                                  observation.time_before_cooldown_sub,
-                                  )).reshape(1, -1)
+            tmp = np.concatenate((observation.prod_p,
+                               observation.load_p,
+                               observation.rho,
+                               observation.timestep_overflow,
+                               observation.line_status,
+                               observation.topo_vect,
+                               observation.time_before_cooldown_line,
+                               observation.time_before_cooldown_sub,
+                               )).reshape(1, -1)
 
             self._tmp_obs = np.zeros((1, tmp.shape[1]), dtype=np.float32)
 
         # TODO optimize that
-        self._tmp_obs[:] = np.concatenate((
-                                           # observation.prod_p,
-                                           # observation.load_p,
-                                           observation.rho,
-                                           observation.timestep_overflow,
-                                           observation.line_status,
-                                           observation.topo_vect,
-                                           observation.time_before_cooldown_line,
-                                           observation.time_before_cooldown_sub,
-                                           )).reshape(1, -1)
+        self._tmp_obs[:] = np.concatenate((observation.prod_p,
+                               observation.load_p,
+                               observation.rho,
+                               observation.timestep_overflow,
+                               observation.line_status,
+                               observation.topo_vect,
+                               observation.time_before_cooldown_line,
+                               observation.time_before_cooldown_sub,
+                               )).reshape(1, -1)
         return self._tmp_obs
 
     def my_act(self, transformed_observation, reward, done=False):
@@ -111,13 +97,6 @@ class DeepQAgent(AgentWithConverter):
         predict_movement_int, *_ = self.deep_q.predict_movement(transformed_observation, epsilon=0.0)
         res = int(predict_movement_int)
         self._store_action_played(res)
-
-        # Own statistics
-        self.action_history.append(res)
-        self.reward_history.append(reward)
-        self._save_run_tensorboard()
-        self.step_run_count += 1
-
         return res
 
     # two below function: to train with multiple environments
@@ -145,15 +124,12 @@ class DeepQAgent(AgentWithConverter):
         return res
 
     # baseline interface
-    def load(self, path, name=None):
+    def load(self, path):
         # not modified compare to original implementation
         if not os.path.exists(path):
             raise RuntimeError("The model should be stored in \"{}\". But this appears to be empty".format(path))
         try:
-            if name is not None:
-                self.deep_q.load_network(path, name=name)
-            else:
-                self.deep_q.load_network(path, name=self.name)
+            self.deep_q.load_network(path, name=self.name)
         except Exception as e:
             raise RuntimeError("Impossible to load the model located at \"{}\" with error {}".format(path, e))
 
@@ -185,7 +161,7 @@ class DeepQAgent(AgentWithConverter):
             os.makedirs(save_path, exist_ok=True)
 
         if logdir is not None:
-            logpath = os.path.join(logdir, 'train')
+            logpath = os.path.join(logdir, self.name)
             self.tf_writer = tf.summary.create_file_writer(logpath, name=self.name)
         else:
             logpath = None
@@ -245,7 +221,6 @@ class DeepQAgent(AgentWithConverter):
                     = self._update_loop(done, temp_reward, temp_done, alive_frame, total_reward, reward, epoch_num)
 
                 # update the replay buffer
-                new_state = new_state.copy()
                 self._store_new_state(initial_state, pm_i, reward, done, new_state)
 
                 # now train the model
@@ -296,7 +271,7 @@ class DeepQAgent(AgentWithConverter):
         self.actions_per_1000steps[which_row, :] = 0
         self.actions_per_1000steps[which_row, action_id] += 1
 
-    def _fast_forward_env(self, env, time=7 * 24 * 60 / 5):
+    def _fast_forward_env(self, env, time=7*24*60/5):
         env.fast_forward_chronics(np.random.randint(0, min(time, env.chronics_handler.max_timestep())))
 
     def _reset_env_clean_state(self, env):
@@ -315,7 +290,7 @@ class DeepQAgent(AgentWithConverter):
         env._reset_vectors_and_timings()
         _backend_action = env._backend_action_class()
         _backend_action.all_changed()
-        env._backend_action = _backend_action
+        env._backend_action =_backend_action
         env.backend.apply_action(_backend_action)
         _backend_action.reset()
         *_, fail_to_start, info = env.step(env.action_space())
@@ -338,7 +313,7 @@ class DeepQAgent(AgentWithConverter):
             # in multi env this is automatically handled
             pass
         elif done[0]:
-            nb_ts_one_day = 24 * 60 / 5
+            nb_ts_one_day = 24*60/5
             # the 3-4 lines below allow to reuse the loaded dataset and continue further up in the
             try:
                 self._reset_env_clean_state(env)
@@ -347,7 +322,7 @@ class DeepQAgent(AgentWithConverter):
             except (StopIteration, Grid2OpException):
                 env.reset()
                 # random fast forward between now and next week
-                self._fast_forward_env(env, time=7 * nb_ts_one_day)
+                self._fast_forward_env(env, time=7*nb_ts_one_day)
 
             obs = [env.current_obs]
             new_state = self.convert_obs_train(obs)
@@ -371,7 +346,6 @@ class DeepQAgent(AgentWithConverter):
     def _next_move(self, curr_state, epsilon):
         pm_i, pq_v = self.deep_q.predict_movement(curr_state, epsilon)
         act = self._convert_all_act(pm_i)
-        self.action_history.append(pm_i[0])
         return pm_i, pq_v, act
 
     def _init_global_train_loop(self):
@@ -406,8 +380,8 @@ class DeepQAgent(AgentWithConverter):
         # Log some useful metrics every even updates
         if step % UPDATE_FREQ == 0 and epoch_num > 0:
             with self.tf_writer.as_default():
-                last_alive = epoch_alive[(epoch_num - 1)]
-                last_reward = epoch_rewards[(epoch_num - 1)]
+                last_alive = epoch_alive[(epoch_num-1)]
+                last_reward = epoch_rewards[(epoch_num-1)]
 
                 mean_reward = np.nanmean(epoch_rewards[:epoch_num])
                 mean_alive = np.nanmean(epoch_alive[:epoch_num])
@@ -425,12 +399,12 @@ class DeepQAgent(AgentWithConverter):
                 nb_ambiguous_act = np.sum(self.ambiguous_actions_per_1000steps)
 
                 if epoch_num >= 100:
-                    mean_reward_100 = np.nanmean(epoch_rewards[(epoch_num - 100):epoch_num])
-                    mean_alive_100 = np.nanmean(epoch_alive[(epoch_num - 100):epoch_num])
+                    mean_reward_100 = np.nanmean(epoch_rewards[(epoch_num-100):epoch_num])
+                    mean_alive_100 = np.nanmean(epoch_alive[(epoch_num-100):epoch_num])
 
                 if epoch_num >= 30:
-                    mean_reward_30 = np.nanmean(epoch_rewards[(epoch_num - 30):epoch_num])
-                    mean_alive_30 = np.nanmean(epoch_alive[(epoch_num - 30):epoch_num])
+                    mean_reward_30 = np.nanmean(epoch_rewards[(epoch_num-30):epoch_num])
+                    mean_alive_30 = np.nanmean(epoch_alive[(epoch_num-30):epoch_num])
 
                 # to ensure "fair" comparison between single env and multi env
                 step_tb = step  # * self.__nb_env
@@ -458,14 +432,3 @@ class DeepQAgent(AgentWithConverter):
 
                 tf.summary.scalar("z_lr", self.train_lr, step_tb)
                 tf.summary.scalar("z_epsilon", self.epsilon, step_tb)
-
-                tf.summary.scalar("action", self.action_history[-1], step_tb)
-                tf.summary.scalar("qvalue_evolution", self.deep_q.qvalue_evolution[-1], step_tb)
-
-    def _save_run_tensorboard(self):
-        if self.tf_run_writer is None:
-            self.tf_run_writer = tf.summary.create_file_writer(os.path.join('logs', self.id, 'run'))
-
-        with self.tf_run_writer.as_default():
-            tf.summary.scalar('action', self.action_history[-1], self.step_run_count)
-            tf.summary.scalar('reward', self.reward_history[-1], self.step_run_count)
