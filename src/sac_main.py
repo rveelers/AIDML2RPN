@@ -7,7 +7,7 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-from sac_agent import SACAgent, SACAgentDiscrete, SACBaselineAgent
+from sac_agent import SACAgent, SACAgent, SACBaselineAgent
 from sac_training_param import TrainingParamSAC
 
 
@@ -40,7 +40,7 @@ def main():
 
     # Initialize the environment and agent
     env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    my_agent = SACAgentDiscrete(action_space=env.action_space)
+    my_agent = SACAgent(action_space=env.action_space)
 
     save_path = "saved_networks"
     logdir = os.path.join('logs', my_agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
