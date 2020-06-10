@@ -58,7 +58,7 @@ class SACNetwork(BaseDeepQ):
         self.previous_eyes_train = None
 
         # For automatic alpha/temperature tuning.  # TODO remove this?
-        self._alpha = tf.Variable(0.05)
+        self._alpha = tf.Variable(training_param.ALPHA)
         self._automatic_alpha_tuning = training_param.AUTOMATIC_ALPHA_TUNING
         if self._automatic_alpha_tuning:
             self._alpha_lr = training_param.ALPHA_LR
@@ -267,9 +267,14 @@ class SACNetwork(BaseDeepQ):
         next_action_values = np.fmin(next_action_values_Q1, next_action_values_Q2)
 
         target_pi = self.model_policy.predict(s2_batch, batch_size=batch_size)
-        # TODO: change this if deterministic policy!!
-        next_action_values = target_pi * (next_action_values - self._alpha * np.log(target_pi + 1e-6))
-        next_state_value = np.sum(next_action_values, axis=-1)  # Sum over the actions (not over the batch)
+
+        deterministic_policy = True  # TODO: make this better
+        if deterministic_policy:
+            next_action = np.argmax(target_pi, axis=-1)
+            next_state_value = next_action_values[np.arange(batch_size), next_action]
+        else:
+            next_action_values = target_pi * (next_action_values - self._alpha * np.log(target_pi + 1e-6))
+            next_state_value = np.sum(next_action_values, axis=-1)  # Sum over the actions (not over the batch)
 
         # Add information about which action was taken by setting last_action[batch_index, action(batch_index)] = 1
         last_action = np.zeros((batch_size, self.action_size))
@@ -307,15 +312,32 @@ class SACNetwork(BaseDeepQ):
 
         target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
 
-        with tf.GradientTape() as tape:
-            pi = self.model_policy(s_batch)
-            log_pi = tf.math.log(pi + 1e-6)
-            policy_loss = self._alpha * log_pi - action_values_min
-            policy_loss = target_pi * policy_loss
-            policy_loss = tf.reduce_sum(policy_loss, axis=-1)
-            policy_loss = tf.reduce_mean(policy_loss)
-        grads = tape.gradient(policy_loss, self.model_policy.trainable_variables)
-        self.optimizer_policy.apply_gradients(zip(grads, self.model_policy.trainable_variables))
+        deterministic_policy = True  # TODO: make this better
+        if deterministic_policy:
+            # Calculate the "advantage" of all actions as compared to the "optimal" (greedy) action.
+            # Advantage = Q(s,a) - V(s) (I have renamed action_v1 --> advantage). All advantage values are <= 0.
+            advantage = action_values_min - np.amax(action_values_min, axis=-1).reshape(batch_size, 1)
+
+            temp = self._alpha  # "temperature"
+
+            # Calculate a probability distribution over the actions (one distribution for every sample in the batch).
+            # Here the temperature parameter comes into play!
+            new_proba = np.exp(advantage / temp) / np.sum(np.exp(advantage / temp), axis=-1).reshape(batch_size, 1)
+            new_proba_ts = tf.convert_to_tensor(new_proba)
+
+            # The loss function used is the categorical cross-ENTROPY loss = - sum_a (new_proba(a) * log(policy(s, a))
+            policy_loss = self.model_policy.train_on_batch(s_batch, new_proba_ts)
+
+        else:  # for stochastic policy ...
+            with tf.GradientTape() as tape:
+                pi = self.model_policy(s_batch)
+                log_pi = tf.math.log(pi + 1e-6)
+                policy_loss = self._alpha * log_pi - action_values_min
+                policy_loss = target_pi * policy_loss
+                policy_loss = tf.reduce_sum(policy_loss, axis=-1)
+                policy_loss = tf.reduce_mean(policy_loss)
+            grads = tape.gradient(policy_loss, self.model_policy.trainable_variables)
+            self.optimizer_policy.apply_gradients(zip(grads, self.model_policy.trainable_variables))
 
         return policy_loss
 

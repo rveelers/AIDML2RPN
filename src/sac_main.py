@@ -1,8 +1,11 @@
 import os
 from datetime import datetime
+import matplotlib.pyplot as plt
 
+from grid2op.Action import TopologyChangeAction
 from grid2op.Plot import EpisodeReplay
 from grid2op.Action.TopologySetAction import TopologySetAction
+from grid2op.PlotGrid import PlotMatplot
 from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
@@ -33,19 +36,19 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 10000
-    NUM_RUN_ITERATIONS = 1000
-    path_grid = 'rte_case14_realistic'
-    train_agent = True
+    NUM_TRAIN_ITERATIONS = 100
+    num_run_iterations = 300
+    path_grid = 'rte_case5_example'
+    train_agent = False
 
     # Initialize the environment and agent
-    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
-    my_agent = SACAgent(action_space=env.action_space)
+    environment = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction, test=True)  # TODO: why test?
+    agent = SACAgent(action_space=environment.action_space)
 
     save_path = "saved_networks"
-    logdir = os.path.join('logs', my_agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
+    logdir = os.path.join('logs', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
 
-    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, my_agent.name, NUM_TRAIN_ITERATIONS))
+    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS))
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
@@ -54,23 +57,47 @@ def main():
 
     # Train the agent
     if train_agent:
-        my_agent.train(env, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir, training_param=TrainingParamSAC())
+        agent.train(environment, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir, training_param=TrainingParamSAC())
     else:
-        obs = env.reset()
-        transformed_obs = my_agent.convert_obs(obs)
-        my_agent.init_deep_q(transformed_obs)
-        my_agent.deep_q.load_network(network_path)
+        obs = environment.reset()
+        transformed_obs = agent.convert_obs(obs)
+        agent.init_deep_q(transformed_obs)
+        agent.deep_q.load_network(network_path)
 
     # Print summary of networks in SAC
     # print('\nSummary of networks in the SAC agent:\n', my_agent.summary())
 
     # Run the agent
     # run_agent(env, my_agent, NUM_RUN_ITERATIONS, plot_replay_episodes=True)
-    for i in range(10):
-        obs = env.get_obs()
-        act = env.step(my_agent.act(observation=obs, reward=0))
-        print(act)
-    env.close()
+
+    obs = environment.reset()
+    reward = 0.
+    cum_reward = 0.
+    done = False
+    act_old = None
+    for i in range(num_run_iterations):
+        act = agent.my_act(agent.convert_obs(obs), reward, done)
+        # _, reward, _, _ = obs.simulate(agent.convert_act(act))
+        # _, reward_zero, _, _ = obs.simulate(agent.convert_act(0))
+        # if reward_zero > reward:
+        #    act = 0
+
+        obs, reward, done, _ = environment.step(agent.convert_act(act))
+        cum_reward += reward
+
+        if act_old != act:
+            print(i, act, reward, done)
+            print(agent.convert_act(act))
+            act_old = act
+            if not done:
+                plot_helper = PlotMatplot(environment.observation_space)
+                fig_layout = plot_helper.plot_obs(environment.get_obs())
+                plt.show(fig_layout)
+
+        if done:
+            environment.reset()
+            print(i, 'done')
+
 
 if __name__ == "__main__":
     main()

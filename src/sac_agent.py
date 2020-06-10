@@ -6,9 +6,23 @@ import os
 from tqdm import tqdm
 
 from l2rpn_baselines.SAC import SAC  # <-- baseline SAC agent, very similar to DeepQAgent
+from l2rpn_baselines.SAC.SAC import SAC_NN
 
 from sac_network import SACNetwork
 from sac_training_param import TrainingParamSAC
+
+
+class SACNNSaving(SAC_NN):
+    """Fix saving"""
+
+    @staticmethod
+    def _get_path_model(path, name=None):
+        path_model = os.path.join(path, 'model')
+        path_target_model = os.path.join(path, 'target')
+        path_modelQ = os.path.join(path, 'Q')
+        path_modelQ2 = os.path.join(path, 'Q2')
+        path_policy = os.path.join(path, 'policy')
+        return path_model, path_target_model, path_modelQ, path_modelQ2, path_policy
 
 
 class SACBaselineAgent(SAC):
@@ -20,6 +34,13 @@ class SACBaselineAgent(SAC):
         super().__init__(action_space)
         self.name = 'SACBaselineAgent'
         self.__nb_env = 1  # TODO: understand why this must be added, as it seems to be part of super().__init__?
+
+    def init_deep_q(self, transformed_observation):
+        self.deep_q = SACNNSaving(self.action_space.size(),
+                                  observation_size=transformed_observation.shape[-1],
+                                  lr=self.lr,
+                                  learning_rate_decay_rate=self.learning_rate_decay_rate,
+                                  learning_rate_decay_steps=self.learning_rate_decay_steps)
 
     def train(self, env, iterations, save_path, logdir, training_param=TrainingParamSAC()):  # NEW Change (1)
         """ Three changes: (1) Use TrainingParamSAC instead of TrainingParam (line above), (2) make a small change to
@@ -83,6 +104,17 @@ class SACBaselineAgent(SAC):
                     act = act[0]
 
                 temp_observation_obj, temp_reward, temp_done, info = env.step(act)
+
+                # for i in range(10):  # TODO experiment with things like this
+                #     if not temp_done:
+                #         temp_observation_obj, dn_reward, temp_done, _ = env.step(self.convert_act(0))
+                #         temp_reward += dn_reward
+                #     if temp_done:
+                #         env.reset()
+                #         temp_reward = 0
+                #         break
+                # temp_reward /= i+1
+
                 if self.__nb_env == 1:
                     # dirty hack to wrap them into list
                     temp_observation_obj = [temp_observation_obj]
@@ -133,8 +165,31 @@ class SACAgent(SACBaselineAgent):
         super().__init__(action_space)
         self.name = 'SACAgent'
 
-    #def summary(self):
-    #    return self.deep_q.summary()
+    def convert_obs(self, observation):
+        if self._tmp_obs is None:
+            tmp = np.concatenate((#observation.prod_p,
+                                  #observation.load_p,
+                                  observation.rho,
+                                  observation.timestep_overflow,
+                                  observation.line_status,
+                                  observation.topo_vect,
+                                  observation.time_before_cooldown_line,
+                                  observation.time_before_cooldown_sub,
+                                  )).reshape(1, -1)
+
+            self._tmp_obs = np.zeros((1, tmp.shape[1]), dtype=np.float32)
+
+        # TODO optimize that
+        self._tmp_obs[:] = np.concatenate((#observation.prod_p,
+                                           #observation.load_p,
+                                           observation.rho,
+                                           observation.timestep_overflow,
+                                           observation.line_status,
+                                           observation.topo_vect,
+                                           observation.time_before_cooldown_line,
+                                           observation.time_before_cooldown_sub,
+                                           )).reshape(1, -1)
+        return self._tmp_obs
 
     def init_deep_q(self, transformed_observation):
         self.deep_q = SACNetwork(self.action_space.size(),
@@ -160,5 +215,3 @@ class SACAgent(SACBaselineAgent):
             self.deep_q.target_train()
 
         return losses_are_all_finite
-
-
