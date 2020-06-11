@@ -1,6 +1,6 @@
 import os
 import time
-from copy import deepcopy
+import numpy as np
 
 import matplotlib.pyplot as plt
 from grid2op.Action import TopologyChangeAction
@@ -12,9 +12,7 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-from double_dueling_dqn import DoubleDuelingAgent
-from deep_q_agent import DeepQAgent
-from split_agent import SplitAgent
+from old_files.deep_q_agent import OldDeepQAgent
 
 # All available grids, if it gives an error remove the test=True flag in the make command
 grid_paths = [
@@ -56,7 +54,8 @@ def train_agent(agent, environment, num_iterations):
     network_path = os.path.join('saved_networks', agent.id)
     log_path = os.path.join('logs', agent.id)
     start = time.time()
-    agent.train(environment, num_iterations, network_path, logdir=log_path)
+    # agent.train(environment, num_iterations, network_path, logdir=log_path)
+    agent.train(environment, num_iterations, network_path)  # TODO add log_dir
     print("Training time:  ", time.time() - start)
 
 
@@ -83,6 +82,7 @@ def run_agent(environment, agent, num_iterations, plot_replay_episodes=True, use
         return res
 
     else:
+        agent.reset_action_history()
         obs = environment.reset()
         reward = 0.
         cum_reward = 0.
@@ -93,26 +93,25 @@ def run_agent(environment, agent, num_iterations, plot_replay_episodes=True, use
             cum_reward += reward
 
             if len(agent.action_history) < 2 or agent.action_history[-2] != act:
-                print('In iteration', i, 'action', act)
+                print('In iteration', i, 'action', act, 'reward', reward)
                 print(agent.convert_act(act))
-                # plot_grid_observation(environment)
+                plot_grid_observation(environment)
 
-            # import numpy as np
-            # predicted_rewards = agent.deep_q.predict_rewards(agent.convert_obs(obs))
-            # expected_rewards = []
-            # for action in range(agent.action_space.size()):
-            #     _, expected_reward, _, _ = obs.simulate(agent.convert_act(action))
-            #     expected_rewards.append(expected_reward)
-            #
-            # predicted_rewards = (predicted_rewards - min(predicted_rewards)) / (max(predicted_rewards) - min(predicted_rewards))
-            # expected_rewards = np.array(expected_rewards) / max(expected_rewards)
-            #
-            # plt.plot(expected_rewards)
-            # plt.plot(predicted_rewards)
-            # plt.show()
+                expected_rewards = []
+                predicted_rewards = agent.deep_q.predict_rewards(agent.process_buffer)
+                for action in range(agent.action_space.size()):
+                    _, expected_reward, _, _ = obs.simulate(agent.convert_act(action))
+                    expected_rewards.append(expected_reward)
 
-            # print(act, reward)
+                # Plot prediction vs expectation
+                # plt.plot(predicted_rewards)
+                # plt.plot(np.array(expected_rewards) * (max(predicted_rewards) / max(expected_rewards)))
+                # plt.show()
+
+            print('In iteration', i, 'action', act, 'reward', reward)
+            # print(agent.convert_act(act))
             # plot_grid_observation(environment)
+
             if done:
                 break
 
@@ -121,21 +120,15 @@ def run_agent(environment, agent, num_iterations, plot_replay_episodes=True, use
 
 if __name__ == "__main__":
     # Initialize the environment and agent
-    # path_grid = "l2rpn_2019"
     path_grid = "rte_case5_example"
-    # path_grid = "rte_case14_realistic"
-    # env = make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologySetAction)
+    # path_grid = "rte_case14_redisp"
     env = make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologyChangeAction)
     # env = make(path_grid, reward_class=L2RPNReward)
 
-    # my_agent = DoNothingAgent(env.action_space)
-    # num_states = DoubleDuelingAgent.get_converted_obs(env.reset()).shape[0]
-    # my_agent = DoubleDuelingAgent(num_states, env.action_space, is_training=False)
-    my_agent = DeepQAgent(env.action_space, store_action=True)
-    # my_agent = SAC(env.action_space, store_action=True)
-    # my_agent = SplitAgent(env.action_space)
+    # my_agent = DeepQAgent(env.action_space, store_action=True)
+    my_agent = OldDeepQAgent(env.action_space)
 
-    num_states = my_agent.convert_obs(env.reset()).shape[1]
+    num_states = my_agent.convert_obs(env.reset()).shape[0]
     num_actions = env.action_space.size()
     num_training_iterations = 10000
     num_run_iterations = 1000

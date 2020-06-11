@@ -1,70 +1,53 @@
+# Copyright (c) 2019-2020, RTE (https://www.rte-france.com)
+# See AUTHORS.txt
+# This Source Code Form is subject to the terms of the Mozilla Public License, version 2.0.
+# If a copy of the Mozilla Public License, version 2.0 was not distributed with this file,
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+# SPDX-License-Identifier: MPL-2.0
+# This file is part of Grid2Op, Grid2Op a testbed platform to model sequential decision making in power systems.
+
 import numpy as np
-from grid2op.Environment import Environment
 
-from grid2op.Reward import L2RPNReward
-from grid2op.Reward import RedispReward
+from grid2op.Reward.BaseReward import BaseReward
+from grid2op.dtypes import dt_float
 
 
-class L2RPNReward_LoadWise(L2RPNReward):
+class L2RPNRewardCostBased(BaseReward):
     """
-    Update the L2RPN reward to take into account the fact that a change in the loads sum shall not be allocated as reward for the agent.
+    This is the historical :class:`BaseReward` used for the Learning To Run a Power Network competition.
+
+    See `L2RPN <https://l2rpn.chalearn.org/>`_ for more information.
 
     """
-
     def __init__(self):
-        super().__init__()
+        BaseReward.__init__(self)
 
     def initialize(self, env):
-        super().initialize(env)
-        self.reward_min = - 10 * env.backend.n_line
-        self.previous_loads = self.reward_max * np.ones(env.backend.n_line)
+        self.reward_min = dt_float(0.0)
+        self.reward_max = dt_float(env.backend.n_line)
 
     def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
         if not is_done and not has_error:
-            line_cap = self._L2RPNReward__get_lines_capacity_usage(env)
-
-            new_loads, _, _ = env.backend.loads_info()
-            new_flows = np.abs(env.backend.get_line_flow())
-            loads_variation = (np.sum(new_loads) - np.sum(self.previous_loads)) / np.sum(self.previous_loads)
-
-            res = np.sum(line_cap + loads_variation)
-        else:
-            # no more data to consider, no powerflow has been run, reward is what it is
-            res = self.reward_min
-        return res
-
-
-class L2RPNReward_LoadWise_ActionWise(L2RPNReward):
-    """
-    Update the L2RPN reward to take into account the fact that a change in the loads sum shall not be allocated as reward for the agent.
-
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def initialize(self, env):
-        super().initialize(env)
-        self.reward_min = - 10 * env.backend.n_line
-        self.previous_loads = self.reward_max * np.ones(env.backend.n_line)
-        self.last_action = env.helper_action_env({})
-
-    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
-        if not is_done and not has_error:
-            line_cap = self._L2RPNReward__get_lines_capacity_usage(env)
-
-            new_loads, _, _ = env.backend.loads_info()
-            new_flows = np.abs(env.backend.get_line_flow())
-            loads_variation = (np.sum(new_loads) - np.sum(self.previous_loads)) / np.sum(self.previous_loads)
-
-            res = np.sum(line_cap + loads_variation)
+            line_cap = self.__get_lines_capacity_usage(env)
+            res = np.sum(line_cap)
         else:
             # no more data to consider, no powerflow has been run, reward is what it is
             res = self.reward_min
 
-        res -= (action != env.helper_action_env({})) * (action == self.last_action) * env.backend.n_line / 2
-
-        self.last_action = action
+        action_impact = action.impact_on_objects()
+        if action_impact['has_impact']:
+            res -= 1
 
         return res
 
+    @staticmethod
+    def __get_lines_capacity_usage(env):
+        ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+        thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+        thermal_limits += 1e-1  # for numerical stability
+        relative_flow = np.divide(ampere_flows, thermal_limits, dtype=dt_float)
+        np.where(relative_flow > 1, -1, np.maximum(dt_float(1.0) - relative_flow ** 2, 0))
+
+        # x = np.minimum(relative_flow, dt_float(1.0))
+        # lines_capacity_usage_score = np.maximum(dt_float(1.0) - x ** 2, np.zeros(x.shape, dtype=dt_float))
+        return relative_flow

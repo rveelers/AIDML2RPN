@@ -7,7 +7,7 @@ from progress_bar import print_progress
 
 
 def plot_state_prediction(state, reward):
-    Y = nn.predict_rewards(state)
+    Y = nn.model.predict(state, batch_size=1)[0]
     X = np.arange(0, reward.shape[0], step=1)
     Y_expected = reward
     plt.plot(X, Y, label='predicted')
@@ -34,13 +34,14 @@ rewards = np.load(os.path.join('generated_data', 'rewards_{}_{}_{}_{}.npy'.forma
 
 loss = 0
 for episode in range(NUM_EPISODES):
-    print_progress(episode, NUM_EPISODES, prefix='Episode {}/{}'.format(episode, NUM_EPISODES))
+    print_progress(episode, NUM_EPISODES, prefix='Episode {}/{}'.format(episode, NUM_EPISODES))  # TODO replace by tqdm
     for iteration in range(iterations):
         start_index = iteration * IL_BATCH_SIZE
         end_index = start_index + IL_BATCH_SIZE
         state_batch = states[start_index:end_index]
         target_batch = rewards[start_index:end_index]
-        loss = nn.train_imitation(state_batch, target_batch)
+        # loss = nn.train_imitation(state_batch, target_batch)
+        loss = nn.model.train_on_batch(state_batch, target_batch)
 
 print("We had an imitation loss equal to ", loss)
 network_path = os.path.join('saved_networks', '{}_{}_{}_IL'.format(path_grid, n, run_id))
