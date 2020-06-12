@@ -161,7 +161,7 @@ class SACNetwork(object):
         """ Predict movement "deterministic"  """
         if batch_size is None:
             batch_size = data.shape[0]
-        rand_val = np.random.random(data.shape[0])
+        # rand_val = np.random.random(data.shape[0])
 
         # Policy outputs a probability distribution over the actions
         p_actions = self.model_policy.predict(data, batch_size=batch_size)
@@ -277,12 +277,14 @@ class SACNetwork(object):
 
         target_pi = self.model_policy.predict(s2_batch, batch_size=batch_size)
 
-        if not self._automatic_alpha_tuning:
-            next_action = np.argmax(target_pi, axis=-1)
-            next_state_value = next_action_values[np.arange(batch_size), next_action]
-        else:
-            next_action_values = target_pi * (next_action_values - self._alpha * np.log(target_pi + 1e-6))
-            next_state_value = np.sum(next_action_values, axis=-1)  # Sum over the actions (not over the batch)
+        # Use the choice of action that is used at evaluation
+        next_action = np.argmax(target_pi, axis=-1)
+        next_state_value = next_action_values[np.arange(batch_size), next_action]
+
+        # OLD: =====
+        # next_action_values = target_pi * (next_action_values - self._alpha * np.log(target_pi + 1e-6))
+        # next_state_value = np.sum(next_action_values, axis=-1)  # Sum over the actions (not over the batch)
+        # ==========
 
         # Add information about which action was taken by setting last_action[batch_index, action(batch_index)] = 1
         last_action = np.zeros((batch_size, self.action_size))

@@ -37,10 +37,10 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 200
+    NUM_TRAIN_ITERATIONS = 10000
     num_run_iterations = 1000
     path_grid = 'rte_case5_example'
-    train_agent = False
+    train_agent = True
 
     # Initialize the environment and agent
     environment = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction, test=True)  # TODO: why test?
