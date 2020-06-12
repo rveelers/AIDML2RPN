@@ -1,3 +1,5 @@
+import os
+import tensorflow as tf
 import numpy as np
 
 from grid2op.Agent import AgentWithConverter
@@ -17,39 +19,48 @@ class OldDeepQAgent(AgentWithConverter):
         self.deep_q = None
         self.replay_buffer = ReplayBuffer(BUFFER_SIZE)
         self.process_buffer = []
+        self.id = self.__class__.__name__
+
+        # Stats
         self.action_history = []
         self.reward_history = []
-        self.id = self.__class__.__name__
+        self.smallest_loss = np.inf
+        self.run_step_count = 0
+        self.run_tf_writer = None
 
     def init_deep_q(self, transformed_observation):
         self.deep_q = DeepQ(self.action_space.n, transformed_observation.shape[0])
 
     def convert_obs(self, observation):
         """ The DeepQ network uses the rho values and line status values as input. """
-        # converted_obs = np.concatenate((
-        #     observation.prod_p / 50,
-        #     observation.load_p / 10,
-        #     observation.rho / 2,
-        #     observation.timestep_overflow / 10,
-        #     observation.line_status,
-        #     (observation.topo_vect + 1) / 3,
-        #     observation.time_before_cooldown_line / 10,
-        #     observation.time_before_cooldown_sub / 10))
-        # if np.any(converted_obs > 1) or np.any(converted_obs < 0):
-        #     print('out of 0-1 scale')
         converted_obs = np.concatenate((
-            observation.prod_p,
-            observation.load_p,
-            observation.rho,
-            observation.timestep_overflow,
+            observation.prod_p / 50,
+            observation.load_p / 20,
+            observation.rho / 2,
+            observation.timestep_overflow / 10,
             observation.line_status,
-            observation.topo_vect,
-            observation.time_before_cooldown_line,
-            observation.time_before_cooldown_sub))
+            (observation.topo_vect + 1) / 3,
+            observation.time_before_cooldown_line / 10,
+            observation.time_before_cooldown_sub / 10))
+        if np.any(converted_obs > 1) or np.any(converted_obs < 0):
+            print('out of 0-1 scale')
+        # converted_obs = np.concatenate((
+        #     observation.prod_p,
+        #     observation.load_p,
+        #     observation.rho,
+        #     observation.timestep_overflow,
+        #     observation.line_status,
+        #     observation.topo_vect,
+        #     observation.time_before_cooldown_line,
+        #     observation.time_before_cooldown_sub))
         return converted_obs
 
     def my_act(self, transformed_observation, reward, done=False):
         """ This method is called by the environment when using Runner. """
+        if self.run_tf_writer is None:
+            log_path = os.path.join('logs', self.id, 'run')
+            self.run_tf_writer = tf.summary.create_file_writer(log_path)
+
         if self.deep_q is None:
             self.init_deep_q(transformed_observation)
 
@@ -60,6 +71,13 @@ class OldDeepQAgent(AgentWithConverter):
         predict_movement_int, _ = self.deep_q.predict_movement(np.concatenate(self.process_buffer), epsilon=0.0)
         self.action_history.append(predict_movement_int)
         # print(self.convert_act(predict_movement_int))
+
+        with self.run_tf_writer.as_default():
+            tf.summary.scalar("action", predict_movement_int, self.run_step_count)
+            tf.summary.scalar("reward", reward, self.run_step_count)
+
+        self.run_step_count += 1
+
         return predict_movement_int
 
     def reset_action_history(self):
@@ -76,6 +94,9 @@ class OldDeepQAgent(AgentWithConverter):
 
     def train(self, env, num_iterations=10000, network_path=None):
         """ Train the agent. """
+        log_path = os.path.join('logs', self.id, 'train')
+        tf_writer = tf.summary.create_file_writer(log_path)
+
         process_buffer = []
         transformed_observation = self.convert_obs(env.reset())
 
@@ -90,7 +111,7 @@ class OldDeepQAgent(AgentWithConverter):
         epsilon_decay = (INITIAL_EPSILON - FINAL_EPSILON) / (num_iterations * 0.75)
         total_reward = 0
         reset_count = 0
-        loss = -1
+        current_loss = np.inf
 
         for iteration in range(num_iterations):
             print_progress(iteration+1, num_iterations, prefix='Step {}/{}'.format(iteration+1, num_iterations),
@@ -135,7 +156,7 @@ class OldDeepQAgent(AgentWithConverter):
             # Start training the network when the replay buffer is full and train each specific number of steps
             if iteration > BATCH_SIZE:  # and iteration % TRAIN_INTERVAL == 0:
                 s_batch, a_batch, r_batch, d_batch, s2_batch = self.replay_buffer.sample(BATCH_SIZE)
-                loss = self.deep_q.train(s_batch, a_batch, r_batch, d_batch, s2_batch)
+                current_loss = self.deep_q.train(s_batch, a_batch, r_batch, d_batch, s2_batch)
                 self.deep_q.target_train()
 
             # Replace the target network each specific number of steps
@@ -146,5 +167,13 @@ class OldDeepQAgent(AgentWithConverter):
             if iteration % 1000 == 999 or iteration == num_iterations-1:
                 print("Saving Network, current loss:", loss)
                 self.deep_q.save_network(network_path)
+
+            if iteration % 100 == 99 or iteration == num_iterations - 1:
+                with tf_writer.as_default():
+                    tf.summary.scalar("loss", current_loss, iteration)
+                    tf.summary.scalar("action", predict_movement_int, iteration)
+                    mean_reward = np.mean(self.reward_history[-100:])
+                    tf.summary.scalar("mean reward last 100 steps", mean_reward, iteration)
+                    tf.summary.scalar("max q-value", predict_q_value, iteration)
 
         env.close()
