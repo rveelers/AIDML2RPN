@@ -149,6 +149,8 @@ class SACNetwork(BaseDeepQ):
         return action, prob
 
     def predict_movement(self, data, epsilon, batch_size=None):
+        #if self._automatic_alpha_tuning:  # TODO
+        #    return self.predict_movement_stochastic(data, epsilon, batch_size=None)
         """ Predict movement as written in the SAC baseline. Not changed, but added comments. """
         if batch_size is None:
             batch_size = data.shape[0]
@@ -200,12 +202,12 @@ class SACNetwork(BaseDeepQ):
         policy_loss = self._train_policy_network(s_batch, batch_size)
 
         # (3) tune alpha/temperature parameter #########################################################################
-        if self._automatic_alpha_tuning:
-            # Calculate loss and do one optimizer step for alpha
-            alpha_loss = self._adjust_alpha(a_batch, s2_batch, batch_size)
-        else:
-            self._alpha = 1 / np.log(self.life_spent) / 2  # TODO: Keep alpha if not stochastic policy?
-            alpha_loss = -1
+        alpha_loss = -1
+        #if self._automatic_alpha_tuning:
+        #    # Calculate loss and do one optimizer step for alpha
+        #    alpha_loss = self._adjust_alpha(a_batch, s2_batch, batch_size)
+        #else:
+        #    self._alpha = 1 / np.log(self.life_spent) / 2  # TODO: Keep alpha if not stochastic policy?
 
         # (4) save statistics to tensorboard logs
         if tf_writer is not None:
@@ -268,8 +270,7 @@ class SACNetwork(BaseDeepQ):
 
         target_pi = self.model_policy.predict(s2_batch, batch_size=batch_size)
 
-        deterministic_policy = True  # TODO: make this better
-        if deterministic_policy:
+        if not self._automatic_alpha_tuning:
             next_action = np.argmax(target_pi, axis=-1)
             next_state_value = next_action_values[np.arange(batch_size), next_action]
         else:
@@ -312,8 +313,7 @@ class SACNetwork(BaseDeepQ):
 
         target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
 
-        deterministic_policy = True  # TODO: make this better
-        if deterministic_policy:
+        if not self._automatic_alpha_tuning:
             # Calculate the "advantage" of all actions as compared to the "optimal" (greedy) action.
             # Advantage = Q(s,a) - V(s) (I have renamed action_v1 --> advantage). All advantage values are <= 0.
             advantage = action_values_min - np.amax(action_values_min, axis=-1).reshape(batch_size, 1)
@@ -346,11 +346,13 @@ class SACNetwork(BaseDeepQ):
             self._target_entropy = 0.0
 
         action_probabilities = self.model_policy.predict(s2_batch, batch_size=batch_size)
-        log_pis = np.log(action_probabilities[np.arange(batch_size), a_batch] + 1e-6)
+        #log_pis = np.log(action_probabilities[np.arange(batch_size), a_batch] + 1e-6)
+        log_pis = np.log(action_probabilities + 1e-6)
 
         with tf.GradientTape() as tape:
             alpha_losses = -1.0 * (self._alpha * log_pis) + self._target_entropy
-            alpha_loss = tf.math.reduce_mean(alpha_losses)
+            alpha_losses = tf.math.reduce_sum(log_pis * alpha_losses)
+            alpha_loss = tf.math.reduce_mean(alpha_losses)/batch_size
 
         alpha_gradients = tape.gradient(alpha_loss, [self._alpha])
         self._alpha_optimizer.apply_gradients(zip(alpha_gradients, [self._alpha]))

@@ -105,16 +105,6 @@ class SACBaselineAgent(SAC):
 
                 temp_observation_obj, temp_reward, temp_done, info = env.step(act)
 
-                # for i in range(10):  # TODO experiment with things like this
-                #     if not temp_done:
-                #         temp_observation_obj, dn_reward, temp_done, _ = env.step(self.convert_act(0))
-                #         temp_reward += dn_reward
-                #     if temp_done:
-                #         env.reset()
-                #         temp_reward = 0
-                #         break
-                # temp_reward /= i+1
-
                 if self.__nb_env == 1:
                     # dirty hack to wrap them into list
                     temp_observation_obj = [temp_observation_obj]
@@ -133,7 +123,7 @@ class SACBaselineAgent(SAC):
                 new_state = new_state.copy()
                 # Adding the line above seems to be enough, but better safe than sorry. Let's also add:
                 initial_state = initial_state.copy()
-                pm_i.copy()
+                # pm_i.copy()  # TODO
                 reward = reward.copy()
                 done = done.copy()
                 # for extra safety.

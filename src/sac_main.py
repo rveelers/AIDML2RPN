@@ -10,7 +10,7 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-from sac_agent import SACAgent, SACAgent, SACBaselineAgent
+from sac_agent import SACAgent, SACBaselineAgent
 from sac_training_param import TrainingParamSAC
 
 
@@ -36,8 +36,8 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 100
-    num_run_iterations = 300
+    NUM_TRAIN_ITERATIONS = 200
+    num_run_iterations = 1000
     path_grid = 'rte_case5_example'
     train_agent = False
 
@@ -48,7 +48,8 @@ def main():
     save_path = "saved_networks"
     logdir = os.path.join('logs', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
 
-    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS))
+    network_path = os.path.join(save_path, '{}_{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS,
+                                                                TrainingParamSAC().AUTOMATIC_ALPHA_TUNING))
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
@@ -59,6 +60,7 @@ def main():
     if train_agent:
         agent.train(environment, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir, training_param=TrainingParamSAC())
     else:
+        network_path = os.path.join(save_path, "rte_case5_example_SACAgent_80000_True_finished")  # TODO
         obs = environment.reset()
         transformed_obs = agent.convert_obs(obs)
         agent.init_deep_q(transformed_obs)
@@ -74,6 +76,7 @@ def main():
     reward = 0.
     cum_reward = 0.
     done = False
+    done_count = 0
     act_old = None
     for i in range(num_run_iterations):
         act = agent.my_act(agent.convert_obs(obs), reward, done)
@@ -96,7 +99,9 @@ def main():
 
         if done:
             environment.reset()
-            print(i, 'done')
+            done_count += 1
+            print(i, ' ======= done ======\n')
+    print(cum_reward, done_count)
 
 
 if __name__ == "__main__":
