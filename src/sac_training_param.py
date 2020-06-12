@@ -11,16 +11,20 @@ class TrainingParamSAC(object):
     def __init__(self,
                  DECAY_RATE=0.90,
                  BUFFER_SIZE=40000,
-                 MINIBATCH_SIZE=64,  # 64,
+                 MINIBATCH_SIZE=10,  # 64,
                  STEP_FOR_FINAL_EPSILON=100000,  # step at which min_espilon is obtain
-                 MIN_OBSERVATION=64,  #64,  # 5000  NOTE: the training does not start before min_observation steps....
+                 MIN_OBSERVATION=10,  #64,  # 5000  NOTE: the training does not start before min_observation steps....
                  FINAL_EPSILON=1./(7*288.),  # have on average 1 random action per week of approx 7*288 time steps
                  INITIAL_EPSILON=0.4,  # NOTE: epsilon is not really used in the updated version /Johan
                  TAU=0.01,
                  ALPHA=0.2,
                  NUM_FRAMES=1,  # 1
                  ALPHA_LR=3e-4,  # 3e-4
-                 AUTOMATIC_ALPHA_TUNING=True  # True
+                 AUTOMATIC_ALPHA_TUNING=False,
+                 lr=3e-4,  # 1e-5
+                 learning_rate_decay_steps=1000,
+                 learning_rate_decay_rate=0.95
+                 # True
                  ):
 
         self.DECAY_RATE = DECAY_RATE
@@ -35,6 +39,13 @@ class TrainingParamSAC(object):
         self.ALPHA = ALPHA
         self.ALPHA_LR = ALPHA_LR
         self.AUTOMATIC_ALPHA_TUNING = AUTOMATIC_ALPHA_TUNING
+
+        self.lr = lr  # TODO
+        self.learning_rate_decay_steps = learning_rate_decay_steps
+        self.learning_rate_decay_rate = learning_rate_decay_rate
+
+        self.UPDATE_FREQ = 100  # update tensorboard every "UPDATE_FREQ" steps
+        self.SAVING_NUM = 1000
 
         self._exp_facto = np.log(self.INITIAL_EPSILON/self.FINAL_EPSILON)
 

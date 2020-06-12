@@ -10,7 +10,8 @@ from grid2op.Reward.L2RPNReward import L2RPNReward
 from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
-from sac_agent import SACAgent, SACBaselineAgent
+from sac_agent_baseline import SACBaselineAgent
+from sac_agent import SACAgent
 from sac_training_param import TrainingParamSAC
 
 
@@ -46,21 +47,20 @@ def main():
     agent = SACAgent(action_space=environment.action_space)
 
     save_path = "saved_networks"
-    logdir = os.path.join('logs', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
+    logdir = os.path.join('logs2', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
 
-    network_path = os.path.join(save_path, '{}_{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS,
-                                                                TrainingParamSAC().AUTOMATIC_ALPHA_TUNING))
+    network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS))
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
     if not os.path.exists(logdir):
-        os.mkdir(logdir)  # TODO
+        os.makedirs(logdir)  # TODO
 
     # Train the agent
     if train_agent:
         agent.train(environment, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir, training_param=TrainingParamSAC())
     else:
-        network_path = os.path.join(save_path, "rte_case5_example_SACAgent_80000_True_finished")  # TODO
+        # network_path = os.path.join(save_path, "rte_case5_example_SACAgent_80000_True_finished")  # TODO
         obs = environment.reset()
         transformed_obs = agent.convert_obs(obs)
         agent.init_deep_q(transformed_obs)
@@ -75,9 +75,8 @@ def main():
     obs = environment.reset()
     reward = 0.
     cum_reward = 0.
-    done = False
-    done_count = 0
     act_old = None
+    done = False
     for i in range(num_run_iterations):
         act = agent.my_act(agent.convert_obs(obs), reward, done)
         # _, reward, _, _ = obs.simulate(agent.convert_act(act))
@@ -86,23 +85,24 @@ def main():
         #    act = 0
 
         obs, reward, done, _ = environment.step(agent.convert_act(act))
+
         cum_reward += reward
 
         if act_old != act:
             print(i, act, reward, done)
             print(agent.convert_act(act))
             act_old = act
+
             if not done:
                 plot_helper = PlotMatplot(environment.observation_space)
                 fig_layout = plot_helper.plot_obs(environment.get_obs())
                 plt.show(fig_layout)
 
         if done:
-            environment.reset()
-            done_count += 1
-            print(i, ' ======= done ======\n')
-    print(cum_reward, done_count)
+            break
 
+    print('Total reward: ', i, cum_reward)
+    environment.reset()
 
 if __name__ == "__main__":
     main()

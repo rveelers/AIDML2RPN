@@ -4,5 +4,6 @@
 src/Agents/
 src/saved_networks/
 src/logs
+src/logs2
 src/logs-eval
 *.gif

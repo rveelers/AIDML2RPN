@@ -12,50 +12,42 @@ with warnings.catch_warnings():
     from tensorflow.keras.models import load_model, Model
     from tensorflow.keras.layers import Activation, Dense
     from tensorflow.keras.layers import Input, Concatenate
+    import tensorflow.keras.optimizers as tfko
+    from tensorflow.keras.models import load_model
 
 from l2rpn_baselines.utils import BaseDeepQ  # Baseline Q network.
 from sac_training_param import TrainingParamSAC
 
 
-class SACNetwork(BaseDeepQ):
-    """ Extension of BaseDeepQ network with many changes (by overwriting functions). """
+class SACNetwork(object):
     # TODO: Should all networks have the same optimizer learning rate/decay?
     # TODO: change trining function according to the non-stochastic policy (take argmax)...
-    def __init__(self,
-                 action_size,
-                 observation_size,
-                 lr=1e-5,
-                 learning_rate_decay_steps=1000,
-                 learning_rate_decay_rate=0.95,
-                 training_param=TrainingParamSAC()):
-        BaseDeepQ.__init__(self, action_size, observation_size,
-                           lr, learning_rate_decay_steps, learning_rate_decay_rate,
-                           training_param)
+    def __init__(self, action_size, observation_size, training_param=TrainingParamSAC()):
+        self.action_size = action_size
+        self.observation_size = observation_size
+        self.training_param = training_param
 
-        self.average_reward = 0
-        self.life_spent = 1
-        self.qvalue_evolution = np.zeros((0,))
-        self.Is_nan = False
+        # For optimizers
+        self.lr = self.training_param.lr
+        self.lr_decay_steps = self.training_param.learning_rate_decay_steps
+        self.lr_decay_rate = self.training_param.learning_rate_decay_rate
 
+        # Optimizers
+        self.schedule_lr_Q, self.optimizer_Q = \
+            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
+        self.schedule_lr_Q2, self.optimizer_Q2 = \
+            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
+        self.schedule_lr_policy, self.optimizer_policy = \
+            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
+
+        # Define and compile the networks (with the optimizers above)
         self.model_Q = None
         self.model_Q2 = None
         self.model_Q_target = None
         self.model_Q2_target = None
         self.model_policy = None
 
-        self.schedule_lr_Q, self.optimizer_Q = self.make_optimiser()
-        self.schedule_lr_Q2, self.optimizer_Q2 = self.make_optimiser()
-        self.schedule_lr_policy, self.optimizer_policy = self.make_optimiser()
-
-        # Define and compile the networks (with the optimizers above)
         self.construct_q_network()
-
-        # These are used in the get_eye functions
-        self.previous_size = 0
-        self.previous_eyes = None
-        self.previous_arange = None
-        self.previous_size_train = 0
-        self.previous_eyes_train = None
 
         # For automatic alpha/temperature tuning.  # TODO remove this?
         self._alpha = tf.Variable(training_param.ALPHA)
@@ -67,11 +59,28 @@ class SACNetwork(BaseDeepQ):
             # https://arxiv.org/pdf/1910.07207.pdf
             self._target_entropy = 0.98 * (np.log(action_size))
 
+        # These are used in the get_eye functions
+        self.previous_size = 0
+        self.previous_eyes = None
+        self.previous_arange = None
+        self.previous_size_train = 0
+        self.previous_eyes_train = None
+
+        # Statistics
+        self.average_reward = 0
+        self.life_spent = 1
+        self.qvalue_evolution = np.zeros((0,))
+        self.Is_nan = False
+
         # Deques for calculating moving averages of losses
         self.Q_loss_30 = deque(maxlen=30)
         self.Q2_loss_30 = deque(maxlen=30)
         self.policy_loss_30 = deque(maxlen=30)
         self.alpha_loss_30 = deque(maxlen=30)
+
+    def make_optimiser(self, lr, lr_decay_steps, lr_decay_rate):
+        schedule = tfko.schedules.InverseTimeDecay(lr, lr_decay_steps, lr_decay_rate)
+        return schedule, tfko.Adam(learning_rate=schedule)
 
     def construct_q_network(self):
         """ Essentially copied (but cleaned up) from SAC_NN"""
@@ -134,7 +143,7 @@ class SACNetwork(BaseDeepQ):
         model_policy = Model(inputs=[input_states], outputs=[soft_proba])
         return model_policy
 
-    def predict_movement_stochastic(self, data, epsilon, batch_size=None):
+    def predict_movement_stochastic(self, data, batch_size=None):
         """ This function is not used. Deterministic --> stochastic policy """  # TODO remove?
         if batch_size is None:
             batch_size = data.shape[0]
@@ -148,10 +157,8 @@ class SACNetwork(BaseDeepQ):
         prob = m.prob(action)
         return action, prob
 
-    def predict_movement(self, data, epsilon, batch_size=None):
-        #if self._automatic_alpha_tuning:  # TODO
-        #    return self.predict_movement_stochastic(data, epsilon, batch_size=None)
-        """ Predict movement as written in the SAC baseline. Not changed, but added comments. """
+    def predict_movement(self, data, batch_size=None):
+        """ Predict movement "deterministic"  """
         if batch_size is None:
             batch_size = data.shape[0]
         rand_val = np.random.random(data.shape[0])
@@ -161,13 +168,13 @@ class SACNetwork(BaseDeepQ):
 
         # Choose the action with the highest probability
         opt_policy_orig = np.argmax(np.abs(p_actions), axis=-1)
-        opt_policy = 1.0 * opt_policy_orig
 
+        # opt_policy = 1.0 * opt_policy_orig
         # With epsilon probability, make actions random instead of using suggestion from policy network
-        opt_policy[rand_val < epsilon] = np.random.randint(0, self.action_size, size=(np.sum(rand_val < epsilon)))
-        opt_policy = opt_policy.astype(np.int)
+        # opt_policy[rand_val < epsilon] = np.random.randint(0, self.action_size, size=(np.sum(rand_val < epsilon)))
+        #opt_policy = opt_policy.astype(np.int)
 
-        return opt_policy, p_actions[:, opt_policy]
+        return opt_policy_orig, p_actions[:, opt_policy_orig]
 
     def get_eye_pm(self, batch_size):
         if batch_size != self.previous_size:

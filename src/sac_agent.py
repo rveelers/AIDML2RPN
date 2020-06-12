@@ -1,54 +1,82 @@
-""" In this file, SACBaselineAgent and SACAgent is defined. The latter is our implementation. """
-
 import numpy as np
 import tensorflow as tf
 import os
 from tqdm import tqdm
 
-from l2rpn_baselines.SAC import SAC  # <-- baseline SAC agent, very similar to DeepQAgent
-from l2rpn_baselines.SAC.SAC import SAC_NN
-
 from sac_network import SACNetwork
 from sac_training_param import TrainingParamSAC
+from grid2op.Agent import AgentWithConverter
+from grid2op.Converter import IdToAct
+from l2rpn_baselines.utils.ReplayBuffer import ReplayBuffer
 
 
-class SACNNSaving(SAC_NN):
-    """Fix saving"""
+class SACAgent(AgentWithConverter):
+    def __init__(self, action_space, name='SACAgent', training_param=TrainingParamSAC(), store_action=False,
+                 istraining=False):
 
-    @staticmethod
-    def _get_path_model(path, name=None):
-        path_model = os.path.join(path, 'model')
-        path_target_model = os.path.join(path, 'target')
-        path_modelQ = os.path.join(path, 'Q')
-        path_modelQ2 = os.path.join(path, 'Q2')
-        path_policy = os.path.join(path, 'policy')
-        return path_model, path_target_model, path_modelQ, path_modelQ2, path_policy
+        AgentWithConverter.__init__(self, action_space, action_space_converter=IdToAct)
+        self.training_param = training_param
+        self.name = name
+        self.store_action = store_action
+        self.istraining = istraining
 
+        self.replay_buffer = ReplayBuffer(training_param.BUFFER_SIZE)
+        self.deep_q = None  # Initialise when we know size of observation
+        self.tf_writer = None
+        self.graph_saved = False
 
-class SACBaselineAgent(SAC):
-    """ This is essentially the baseline SAC agent, but with the buffer error fixed. The SAC baseline agent is
-     essentially DeepQAgent, initialized with a different network. The train function in DeepQAgent is where the
-     problem is. """
+        # Statistics
+        self.losses = None
+        self.epoch_num_steps_alive = None
+        self.epoch_rewards = None
+        self.reset_num = None
 
-    def __init__(self, action_space):
-        super().__init__(action_space)
-        self.name = 'SACBaselineAgent'
-        self.__nb_env = 1  # TODO: understand why this must be added, as it seems to be part of super().__init__?
+        self.dict_action = {}
+
+        self.actions_per_1000steps = np.zeros((1000, self.action_space.size()), dtype=np.int)
+        self.illegal_actions_per_1000steps = np.zeros(1000, dtype=np.int)
+        self.ambiguous_actions_per_1000steps = np.zeros(1000, dtype=np.int)
+
+        self.obs_as_vect = None
+        self._tmp_obs = None
 
     def init_deep_q(self, transformed_observation):
-        self.deep_q = SACNNSaving(self.action_space.size(),
-                                  observation_size=transformed_observation.shape[-1],
-                                  lr=self.lr,
-                                  learning_rate_decay_rate=self.learning_rate_decay_rate,
-                                  learning_rate_decay_steps=self.learning_rate_decay_steps)
+        self.deep_q = SACNetwork(self.action_space.size(),
+                                 observation_size=transformed_observation.shape[-1],
+                                 training_param=self.training_param)
 
-    def train(self, env, iterations, save_path, logdir, training_param=TrainingParamSAC()):  # NEW Change (1)
-        """ Three changes: (1) Use TrainingParamSAC instead of TrainingParam (line above), (2) make a small change to
-        where the logs are saved, (3) fix buffer error. """
+    def my_act(self, transformed_observation, reward, done=False):
+        """ Used when evaluating the agent """
+        if self.deep_q is None:
+            self.init_deep_q(transformed_observation)
+        predict_movement_int, *_ = self.deep_q.predict_movement(transformed_observation)
+        res = int(predict_movement_int)
+        # self._store_action_played(res)
+        return res
 
-        self.training_param = training_param
-        self._init_replay_buffer()
+    def _next_move(self, curr_state):
+        """ Used in training. Includes exploration"""
+        action, prob = self.deep_q.predict_movement_stochastic(curr_state)
+        return int(action), prob.numpy()
 
+    def convert_obs(self, observation):
+        tmp = np.concatenate((observation.prod_p / 50.0,
+                              observation.load_p / 20.0,
+                              observation.rho / 2.0,
+                              observation.timestep_overflow / 10.0,
+                              observation.line_status,
+                              observation.topo_vect,
+                              observation.time_before_cooldown_line / 10.0,
+                              observation.time_before_cooldown_sub / 10.0,
+                              )).reshape(1, -1)
+
+        if self._tmp_obs is None:  # TODO: why?
+            self._tmp_obs = np.zeros((1, tmp.shape[1]), dtype=np.float32)
+        else:
+            self._tmp_obs[:] = tmp
+        return self._tmp_obs
+
+    def train(self, env, iterations, save_path, logdir, training_param):
         # efficient reading of the data (read them by chunk of roughly 1 day
         nb_ts_one_day = 24 * 60 / 5  # number of time steps per day
         self.set_chunk(env, nb_ts_one_day)
@@ -58,135 +86,62 @@ class SACBaselineAgent(SAC):
             save_path = os.path.abspath(save_path)
             os.makedirs(save_path, exist_ok=True)
 
+        # Tensorboard writer
         if logdir is not None:
-            self.tf_writer = tf.summary.create_file_writer(logdir, name=self.name)  # NEW Change (2)
-        else:
-            self.tf_writer = None
-        UPDATE_FREQ = 100  # update tensorboard every "UPDATE_FREQ" steps
-        SAVING_NUM = 1000
+            self.tf_writer = tf.summary.create_file_writer(logdir, name=self.name)
 
-        training_step = 0
-
-        # some parameters have been move to a class named "training_param" for convenience
-        self.epsilon = training_param.INITIAL_EPSILON
-
-        # now the number of alive frames and total reward depends on the "underlying environment". It is vector instead
-        # of scalar
-        alive_frame, total_reward = self._init_global_train_loop()
-        reward, done = self._init_local_train_loop()
-        epoch_num = 0
         self.losses = np.zeros(iterations)
-        alive_frames = np.zeros(iterations)
-        total_rewards = np.zeros(iterations)
-        new_state = None
+        self.epoch_num_steps_alive = np.zeros(iterations)
+        self.epoch_rewards = np.zeros(iterations)
         self.reset_num = 0
+
+        # Initialize the NN with proper shape
+        obs = env.reset()
+        self.init_deep_q(self.convert_obs(obs))
+
+        epoch_num = 0  # Increase this every time we reach the done state
         with tqdm(total=iterations) as pbar:
-            while training_step < iterations:
-                # reset or build the environment
-                initial_state = self._need_reset(env, training_step, epoch_num, done, new_state)
+            for training_step in range(iterations):
+                # Get current/initial state
+                initial_state = self.convert_obs(obs)
 
-                # Slowly decay the exploration parameter epsilon
-                # if self.epsilon > training_param.FINAL_EPSILON:
-                self.epsilon = training_param.get_next_epsilon(current_step=training_step)
+                # predict next moves
+                act, act_prob = self._next_move(initial_state)
 
-                if training_step == 0:
-                    # we initialize the NN with the proper shape
-                    self.init_deep_q(initial_state)
+                # Take step and convert obs
+                act_obj = self.convert_act(act)
+                obs, reward, done, info = env.step(act_obj)
+                new_state = self.convert_obs(obs)
 
-                # then we need to predict the next moves. Agents have been adapted to predict a batch of data
-                pm_i, pq_v, act = self._next_move(initial_state, self.epsilon)
+                if done:
+                    epoch_num += 1
+                    reward = 0
+                    obs = env.reset()
+                else:
+                    self.epoch_num_steps_alive[epoch_num] += 1
+                    self.epoch_rewards[epoch_num] += reward
 
-                # todo store the illegal / ambiguous / ... actions
-                reward, done = self._init_local_train_loop()
-                if self.__nb_env == 1:
-                    # still the "hack" to have same interface between multi env and env...
-                    # yeah it's a pain
-                    act = act[0]
+                # Add to replay buffer
+                self.replay_buffer.add(initial_state.squeeze(), act, reward, done, new_state.squeeze())
 
-                temp_observation_obj, temp_reward, temp_done, info = env.step(act)
+                self._store_action_played_train(training_step, act)
+                self._update_illegal_ambiguous(training_step, info)
 
-                if self.__nb_env == 1:
-                    # dirty hack to wrap them into list
-                    temp_observation_obj = [temp_observation_obj]
-                    temp_reward = np.array([temp_reward], dtype=np.float32)
-                    temp_done = np.array([temp_done], dtype=np.bool)
-                    info = [info]
-                new_state = self.convert_obs_train(temp_observation_obj)
-
-                self._updage_illegal_ambiguous(training_step, info)
-                done, reward, total_reward, alive_frame, epoch_num \
-                    = self._update_loop(done, temp_reward, temp_done, alive_frame, total_reward, reward, epoch_num)
-
-                # update the replay buffer
-                # NEW (Johan 2020-06-05): If the following line is not added, s == s2 always in the replay pool
-                # Change (3)
-                new_state = new_state.copy()
-                # Adding the line above seems to be enough, but better safe than sorry. Let's also add:
-                initial_state = initial_state.copy()
-                # pm_i.copy()  # TODO
-                reward = reward.copy()
-                done = done.copy()
-                # for extra safety.
-                # END NEW
-                self._store_new_state(initial_state, pm_i, reward, done, new_state)
-
-                # now train the model
+                # Train the model
                 if not self._train_model(training_param, training_step):
-                    # infinite loss in this case
                     print("ERROR INFINITE LOSS")
                     break
 
-                # Save the network every 1000 iterations
-                if training_step % SAVING_NUM == 0 or training_step == iterations - 1:
-                    self.save(save_path)
+                # Save network every SAVING_NUM steps
+                if training_step % self.training_param.SAVING_NUM == 0 or training_step == iterations - 1:
+                    self.deep_q.save_network(save_path)
 
-                # save some information to tensorboard
-                alive_frames[epoch_num] = np.mean(alive_frame)
-                total_rewards[epoch_num] = np.mean(total_reward)
-                self._store_action_played_train(training_step, pm_i)
+                # Save stats to Tensorboard every UPDATE_FREQ steps
+                if training_step % self.training_param.UPDATE_FREQ == 0 and epoch_num > 0:
+                    self._save_tensorboard(epoch_num, training_step, self.epoch_rewards, self.epoch_num_steps_alive)
 
-                self._save_tensorboard(training_step, epoch_num, UPDATE_FREQ, total_rewards, alive_frames)
-                training_step += 1
+                # Update progress bar
                 pbar.update(1)
-
-
-class SACAgent(SACBaselineAgent):
-    def __init__(self, action_space):
-        super().__init__(action_space)
-        self.name = 'SACAgent'
-
-    def convert_obs(self, observation):
-        if self._tmp_obs is None:
-            tmp = np.concatenate((#observation.prod_p,
-                                  #observation.load_p,
-                                  observation.rho,
-                                  observation.timestep_overflow,
-                                  observation.line_status,
-                                  observation.topo_vect,
-                                  observation.time_before_cooldown_line,
-                                  observation.time_before_cooldown_sub,
-                                  )).reshape(1, -1)
-
-            self._tmp_obs = np.zeros((1, tmp.shape[1]), dtype=np.float32)
-
-        # TODO optimize that
-        self._tmp_obs[:] = np.concatenate((#observation.prod_p,
-                                           #observation.load_p,
-                                           observation.rho,
-                                           observation.timestep_overflow,
-                                           observation.line_status,
-                                           observation.topo_vect,
-                                           observation.time_before_cooldown_line,
-                                           observation.time_before_cooldown_sub,
-                                           )).reshape(1, -1)
-        return self._tmp_obs
-
-    def init_deep_q(self, transformed_observation):
-        self.deep_q = SACNetwork(self.action_space.size(),
-                                 observation_size=transformed_observation.shape[-1],
-                                 lr=self.lr,
-                                 learning_rate_decay_rate=self.learning_rate_decay_rate,
-                                 learning_rate_decay_steps=self.learning_rate_decay_steps)
 
     def _train_model(self, training_param, training_step):
         losses_are_all_finite = True
@@ -198,10 +153,59 @@ class SACAgent(SACBaselineAgent):
             # Train on batch
             losses_are_all_finite = self.deep_q.train(s_batch, a_batch, r_batch, d_batch, s2_batch, self.tf_writer)
 
-            # save learning rate for later
-            self.train_lr = self.deep_q.optimizer_Q._decayed_lr('float32').numpy()
-
             # Update target Q networks
             self.deep_q.target_train()
 
         return losses_are_all_finite
+
+    def _save_tensorboard(self, epoch_num, training_step, epoch_rewards, epoch_alive):
+        if self.tf_writer is None:
+            return
+
+        with self.tf_writer.as_default():
+            last_alive = epoch_alive[(epoch_num - 1)]  # Number of steps we stayed alive in the previous epoch
+            last_reward = epoch_rewards[(epoch_num - 1)]  # Total reward for previous epoch
+
+            mean_reward = np.nanmean(epoch_rewards[:epoch_num])  # Average epoch reward
+            mean_alive = np.nanmean(epoch_alive[:epoch_num])  # Average num steps alive/epoch
+
+            tmp = self.actions_per_1000steps > 0
+            tmp = tmp.sum(axis=0)
+            nb_action_taken_last_1000_step = np.sum(tmp > 0)  # number of different actions taken last 1000 steps
+            nb_illegal_act = np.sum(self.illegal_actions_per_1000steps)  # number of illegal acts/1000 steps
+            nb_ambiguous_act = np.sum(self.ambiguous_actions_per_1000steps)  # number of ambiguous acts/1000 steps
+
+            if epoch_num >= 30:
+                mean_reward_30 = np.nanmean(epoch_rewards[(epoch_num - 30):epoch_num])
+                mean_alive_30 = np.nanmean(epoch_alive[(epoch_num - 30):epoch_num])
+            else:
+                mean_reward_30 = mean_reward
+                mean_alive_30 = mean_alive
+
+            # show first the Mean reward and mine time alive (hence the upper case)
+            tf.summary.scalar("length_of_epochs/last_epoch", last_alive, training_step)
+            tf.summary.scalar("length_of_epochs/mean_30", mean_alive_30, training_step)
+            tf.summary.scalar("length_of_epochs/total_mean", mean_alive, training_step)
+
+            tf.summary.scalar("rewards/total_reward_last_epoch", last_reward, training_step)
+            tf.summary.scalar("rewards/mean_reward_30_epochs", mean_reward_30, training_step)
+            tf.summary.scalar("rewards/mean_reward_all_epochs", mean_reward, training_step)
+
+            tf.summary.scalar("actions/nb_differentaction_taken_1000", nb_action_taken_last_1000_step, training_step)
+            tf.summary.scalar("actions/nb_illegal_act_1000", nb_illegal_act, training_step)
+            tf.summary.scalar("actions/nb_ambiguous_act_1000", nb_ambiguous_act, training_step)
+
+    # utilities for data reading
+    def set_chunk(self, env, nb):
+        env.set_chunk_size(int(max(100, nb)))
+
+    def _update_illegal_ambiguous(self, curr_step, info):
+        self.illegal_actions_per_1000steps[curr_step % 1000] = int(info["is_illegal"])
+        self.ambiguous_actions_per_1000steps[curr_step % 1000] = int(info["is_ambiguous"])
+
+    def _store_action_played_train(self, training_step, action_id):
+        which_row = training_step % 1000
+        self.actions_per_1000steps[which_row, :] = 0
+        self.actions_per_1000steps[which_row, action_id] += 1
+
+
