@@ -320,33 +320,34 @@ class SACNetwork(object):
                                                  batch_size=batch_size).reshape(batch_size, -1)
         action_values_min = np.fmin(action_values_Q1, action_values_Q2)
 
-        target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
+        # For "deterministic" policy
 
-        if not self._automatic_alpha_tuning:
-            # Calculate the "advantage" of all actions as compared to the "optimal" (greedy) action.
-            # Advantage = Q(s,a) - V(s) (I have renamed action_v1 --> advantage). All advantage values are <= 0.
-            advantage = action_values_min - np.amax(action_values_min, axis=-1).reshape(batch_size, 1)
+        # Calculate the "advantage" of all actions as compared to the "optimal" (greedy) action.
+        # Advantage = Q(s,a) - V(s) (I have renamed action_v1 --> advantage). All advantage values are <= 0.
+        advantage = action_values_min - np.amax(action_values_min, axis=-1).reshape(batch_size, 1)
 
-            temp = self._alpha  # "temperature"
+        temp = self._alpha  # "temperature"
 
-            # Calculate a probability distribution over the actions (one distribution for every sample in the batch).
-            # Here the temperature parameter comes into play!
-            new_proba = np.exp(advantage / temp) / np.sum(np.exp(advantage / temp), axis=-1).reshape(batch_size, 1)
-            new_proba_ts = tf.convert_to_tensor(new_proba)
+        # Calculate a probability distribution over the actions (one distribution for every sample in the batch).
+        # Here the temperature parameter comes into play!
+        new_proba = np.exp(advantage / temp) / np.sum(np.exp(advantage / temp), axis=-1).reshape(batch_size, 1)
+        new_proba_ts = tf.convert_to_tensor(new_proba)
 
-            # The loss function used is the categorical cross-ENTROPY loss = - sum_a (new_proba(a) * log(policy(s, a))
-            policy_loss = self.model_policy.train_on_batch(s_batch, new_proba_ts)
+        # The loss function used is the categorical cross-ENTROPY loss = - sum_a (new_proba(a) * log(policy(s, a))
+        policy_loss = self.model_policy.train_on_batch(s_batch, new_proba_ts)
 
-        else:  # for stochastic policy ...
-            with tf.GradientTape() as tape:
-                pi = self.model_policy(s_batch)
-                log_pi = tf.math.log(pi + 1e-6)
-                policy_loss = self._alpha * log_pi - action_values_min
-                policy_loss = target_pi * policy_loss
-                policy_loss = tf.reduce_sum(policy_loss, axis=-1)
-                policy_loss = tf.reduce_mean(policy_loss)
-            grads = tape.gradient(policy_loss, self.model_policy.trainable_variables)
-            self.optimizer_policy.apply_gradients(zip(grads, self.model_policy.trainable_variables))
+        # for stochastic policy ...
+        # target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
+
+        # with tf.GradientTape() as tape:
+        #     pi = self.model_policy(s_batch)
+        #     log_pi = tf.math.log(pi + 1e-6)
+        #     policy_loss = self._alpha * log_pi - action_values_min
+        #     policy_loss = target_pi * policy_loss
+        #     policy_loss = tf.reduce_sum(policy_loss, axis=-1)
+        #     policy_loss = tf.reduce_mean(policy_loss)
+        # grads = tape.gradient(policy_loss, self.model_policy.trainable_variables)
+        # self.optimizer_policy.apply_gradients(zip(grads, self.model_policy.trainable_variables))
 
         return policy_loss
 
