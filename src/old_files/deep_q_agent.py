@@ -163,9 +163,10 @@ class OldDeepQAgent(AgentWithConverter):
             # if iteration % REPLACE_TARGET_INTERVAL == 0:
             #     self.deep_q.replace_target()
 
-            # Save the network every 1000 iterations and final iteration
-            if iteration % 1000 == 999 or iteration == num_iterations-1:
-                print("Saving Network, current loss:", loss)
+            # Save the network every 100 iterations and it is has the smallest loss so far
+            if iteration % 100 == 99 and current_loss < self.smallest_loss:
+                self.smallest_loss = current_loss
+                print("Saving Network, current loss:", current_loss)
                 self.deep_q.save_network(network_path)
 
             if iteration % 100 == 99 or iteration == num_iterations - 1:
