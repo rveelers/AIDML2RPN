@@ -22,61 +22,6 @@ from sac_training_param import TrainingParamSAC
 class SACNetwork(object):
     # TODO: Should all networks have the same optimizer learning rate/decay?
     # TODO: change trining function according to the non-stochastic policy (take argmax)...
-    def __init__(self, action_size, observation_size, training_param=TrainingParamSAC()):
-        self.action_size = action_size
-        self.observation_size = observation_size
-        self.training_param = training_param
-
-        # For optimizers
-        self.lr = self.training_param.lr
-        self.lr_decay_steps = self.training_param.learning_rate_decay_steps
-        self.lr_decay_rate = self.training_param.learning_rate_decay_rate
-
-        # Optimizers
-        self.schedule_lr_Q, self.optimizer_Q = \
-            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
-        self.schedule_lr_Q2, self.optimizer_Q2 = \
-            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
-        self.schedule_lr_policy, self.optimizer_policy = \
-            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
-
-        # Define and compile the networks (with the optimizers above)
-        self.model_Q = None
-        self.model_Q2 = None
-        self.model_Q_target = None
-        self.model_Q2_target = None
-        self.model_policy = None
-
-        self.construct_q_network()
-
-        # For automatic alpha/temperature tuning.  # TODO remove this?
-        self._alpha = tf.Variable(training_param.ALPHA)
-        self._automatic_alpha_tuning = training_param.AUTOMATIC_ALPHA_TUNING
-        if self._automatic_alpha_tuning:
-            self._alpha_lr = training_param.ALPHA_LR
-            self._alpha_optimizer = tf.optimizers.Adam(self._alpha_lr, name='alpha_optimizer')
-            # Set the target entropy according to the paper: "SOFT ACTOR-CRITIC FOR DISCRETE ACTION SETTINGS"
-            # https://arxiv.org/pdf/1910.07207.pdf
-            self._target_entropy = 0.98 * (np.log(action_size))
-
-        # These are used in the get_eye functions
-        self.previous_size = 0
-        self.previous_eyes = None
-        self.previous_arange = None
-        self.previous_size_train = 0
-        self.previous_eyes_train = None
-
-        # Statistics
-        self.average_reward = 0
-        self.life_spent = 1
-        self.qvalue_evolution = np.zeros((0,))
-        self.Is_nan = False
-
-        # Deques for calculating moving averages of losses
-        self.Q_loss_30 = deque(maxlen=30)
-        self.Q2_loss_30 = deque(maxlen=30)
-        self.policy_loss_30 = deque(maxlen=30)
-        self.alpha_loss_30 = deque(maxlen=30)
 
     def make_optimiser(self, lr, lr_decay_steps, lr_decay_rate):
         schedule = tfko.schedules.InverseTimeDecay(lr, lr_decay_steps, lr_decay_rate)
@@ -84,7 +29,7 @@ class SACNetwork(object):
 
     def construct_q_network(self):
         """ Essentially copied (but cleaned up) from SAC_NN"""
-        # construct double Q networks
+        # Double Q networks
         self.model_Q = self._build_q_NN()
         self.model_Q2 = self._build_q_NN()
 
@@ -115,10 +60,10 @@ class SACNetwork(object):
         lay1 = Dense(self.observation_size)(input_layer)
         lay1 = Activation('relu')(lay1)
 
-        lay2 = Dense(self.observation_size)(lay1)
-        lay2 = Activation('relu')(lay2)
+        # lay2 = Dense(self.observation_size)(lay1)
+        # lay2 = Activation('relu')(lay2)
 
-        lay3 = Dense(2 * self.action_size)(lay2)
+        lay3 = Dense(2 * self.action_size)(lay1)
         lay3 = Activation('relu')(lay3)
 
         advantage = Dense(1, activation='linear')(lay3)
@@ -133,18 +78,78 @@ class SACNetwork(object):
         lay1 = Dense(self.observation_size)(input_states)
         lay1 = Activation('relu')(lay1)
 
-        lay2 = Dense(self.observation_size)(lay1)
-        lay2 = Activation('relu')(lay2)
+        # lay2 = Dense(self.observation_size)(lay1)
+        # lay2 = Activation('relu')(lay2)
 
-        lay3 = Dense(2 * self.action_size)(lay2)
+        lay3 = Dense(2 * self.action_size)(lay1)
         lay3 = Activation('relu')(lay3)
 
         soft_proba = Dense(self.action_size, activation="softmax", kernel_initializer='uniform')(lay3)
         model_policy = Model(inputs=[input_states], outputs=[soft_proba])
         return model_policy
 
+    def __init__(self, action_size, observation_size, training_param=TrainingParamSAC()):
+        self.action_size = action_size
+        self.observation_size = observation_size
+        self.training_param = training_param
+
+        # For optimizers
+        self.lr = self.training_param.lr
+        self.lr_decay_steps = self.training_param.learning_rate_decay_steps
+        self.lr_decay_rate = self.training_param.learning_rate_decay_rate
+
+        # Optimizers
+        self.schedule_lr_Q, self.optimizer_Q = \
+            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
+        self.schedule_lr_Q2, self.optimizer_Q2 = \
+            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
+        self.schedule_lr_policy, self.optimizer_policy = \
+            self.make_optimiser(self.lr, self.lr_decay_steps, self.lr_decay_rate)
+
+        # Models
+        self.model_Q = None
+        self.model_Q2 = None
+        self.model_Q_target = None
+        self.model_Q2_target = None
+        self.model_policy = None
+
+        # Define and compile the networks (with the optimizers above)
+        self.construct_q_network()
+
+        # For automatic alpha/temperature tuning.
+        self._alpha = tf.Variable(training_param.ALPHA)
+
+        self._automatic_alpha_tuning = training_param.AUTOMATIC_ALPHA_TUNING
+        if self._automatic_alpha_tuning:
+            self._log_alpha = tf.Variable(tf.math.log(self._alpha))
+
+            self._alpha_lr = training_param.ALPHA_LR
+            self._alpha_optimizer = tf.optimizers.Adam(self._alpha_lr, name='alpha_optimizer')
+            # The paper: "SOFT ACTOR-CRITIC FOR DISCRETE ACTION SETTINGS" https://arxiv.org/pdf/1910.07207.pdf
+            # suggests to set the target entropy to 0.98 * (np.log(action_size)) which is very close to the maximum
+            # entropy np.log(action_size) ??
+            self._target_entropy = 0.98 * (np.log(action_size))  # TODO how to set this???
+
+        # These are used in the get_eye functions
+        self.previous_size = 0
+        self.previous_eyes = None
+        self.previous_arange = None
+        self.previous_size_train = 0
+        self.previous_eyes_train = None
+
+        # Statistics
+        self.average_reward = 0
+        self.life_spent = 1
+        self.Is_nan = False
+
+        # Deques for calculating moving averages of losses
+        self.Q_loss_30 = deque(maxlen=30)
+        self.Q2_loss_30 = deque(maxlen=30)
+        self.policy_loss_30 = deque(maxlen=30)
+        self.alpha_loss_30 = deque(maxlen=30)
+
     def predict_movement_stochastic(self, data, batch_size=None):
-        """ This function is not used. Deterministic --> stochastic policy """  # TODO remove?
+        """ Stochastic policy """
         if batch_size is None:
             batch_size = data.shape[0]
         # Policy outputs a probability distribution over the actions
@@ -157,11 +162,10 @@ class SACNetwork(object):
         prob = m.prob(action)
         return action, prob
 
-    def predict_movement(self, data, batch_size=None):
+    def predict_movement(self, data, batch_size=None, epsilon=0.0):
         """ Predict movement "deterministic"  """
         if batch_size is None:
             batch_size = data.shape[0]
-        # rand_val = np.random.random(data.shape[0])
 
         # Policy outputs a probability distribution over the actions
         p_actions = self.model_policy.predict(data, batch_size=batch_size)
@@ -169,12 +173,17 @@ class SACNetwork(object):
         # Choose the action with the highest probability
         opt_policy_orig = np.argmax(np.abs(p_actions), axis=-1)
 
-        # opt_policy = 1.0 * opt_policy_orig
-        # With epsilon probability, make actions random instead of using suggestion from policy network
-        # opt_policy[rand_val < epsilon] = np.random.randint(0, self.action_size, size=(np.sum(rand_val < epsilon)))
-        #opt_policy = opt_policy.astype(np.int)
+        opt_policy = 1.0 * opt_policy_orig
 
-        return opt_policy_orig, p_actions[:, opt_policy_orig]
+        # With epsilon probability, make actions random instead of using suggestion from policy network =======
+        # TODO: choose random action with stochastic_predict_movement?
+        rand_val = np.random.random(data.shape[0])
+        opt_policy[rand_val < epsilon] = np.random.randint(0, self.action_size, size=(np.sum(rand_val < epsilon)))
+        # =====================================================================================================
+
+        opt_policy = opt_policy.astype(np.int)
+
+        return opt_policy, p_actions[:, opt_policy]
 
     def get_eye_pm(self, batch_size):
         if batch_size != self.previous_size:
@@ -209,12 +218,12 @@ class SACNetwork(object):
         policy_loss = self._train_policy_network(s_batch, batch_size)
 
         # (3) tune alpha/temperature parameter #########################################################################
-        alpha_loss = -1
-        #if self._automatic_alpha_tuning:
-        #    # Calculate loss and do one optimizer step for alpha
-        #    alpha_loss = self._adjust_alpha(a_batch, s2_batch, batch_size)
-        #else:
-        #    self._alpha = 1 / np.log(self.life_spent) / 2  # TODO: Keep alpha if not stochastic policy?
+        if self._automatic_alpha_tuning:
+            # Calculate loss and do one optimizer step for alpha
+            alpha_loss = self._adjust_alpha(a_batch, s_batch, batch_size)
+        else:
+            self._alpha = 1 / np.log(self.life_spent) / 2  # TODO: Keep alpha if not stochastic policy?
+            alpha_loss = -1
 
         # (4) save statistics to tensorboard logs
         if tf_writer is not None:
@@ -228,8 +237,8 @@ class SACNetwork(object):
                     tf.summary.scalar("loss/Q1_loss_30", np.mean(self.Q_loss_30), self.life_spent)
                     tf.summary.scalar("loss/Q2_loss_30", np.mean(self.Q2_loss_30), self.life_spent)
                     tf.summary.scalar("loss/policy_loss_30", np.mean(self.policy_loss_30), self.life_spent)
+                    tf.summary.scalar("alpha/alpha", self._alpha, self.life_spent)
                     if self._automatic_alpha_tuning:
-                        tf.summary.scalar("alpha/alpha", self._alpha, self.life_spent)
                         tf.summary.scalar("alpha/alpha_loss_30", np.mean(self.alpha_loss_30), self.life_spent)
 
         losses = (Q_loss, Q2_loss, policy_loss, alpha_loss)
@@ -254,6 +263,7 @@ class SACNetwork(object):
         self.model_Q2_target.set_weights(Q2_target_weights)
 
     def _train_Q_networks(self, s_batch, a_batch, r_batch, d_batch, s2_batch, batch_size):
+        # (1) Find the current estimate of the next state value.
         # Create a huge matrix of shape (batch_size*action_size, observation_size). It is essentially action_size copies
         # of s_batch stacked on top of each other.
         tiled_s2_batch = np.tile(s2_batch, (self.action_size, 1))
@@ -277,24 +287,27 @@ class SACNetwork(object):
 
         target_pi = self.model_policy.predict(s2_batch, batch_size=batch_size)
 
-        # Use the choice of action that is used at evaluation
-        next_action = np.argmax(target_pi, axis=-1)
-        next_state_value = next_action_values[np.arange(batch_size), next_action]
-
-        # OLD: =====
+        # Estimate value of the next state
+        # According to SAC Discrete paper =============================
         # next_action_values = target_pi * (next_action_values - self._alpha * np.log(target_pi + 1e-6))
         # next_state_value = np.sum(next_action_values, axis=-1)  # Sum over the actions (not over the batch)
-        # ==========
+        # =============================================================
 
-        # Add information about which action was taken by setting last_action[batch_index, action(batch_index)] = 1
-        last_action = np.zeros((batch_size, self.action_size))
-        last_action[np.arange(batch_size), a_batch] = 1
+        # ALTERNATIVE: Use the choice of action that is used at evaluation ======
+        next_action = np.argmax(target_pi, axis=-1)
+        next_state_value = next_action_values[np.arange(batch_size), next_action]
+        # =======================================================================
 
-        # Bellman. The "target" for the Q networks is the expected reward = sum of immediate reward r_batch and the
-        # discounted value of the next state (predicted by the model_value_target network)
+        # (2) Bellman. The "target" for the Q networks is the expected reward = sum of immediate reward r_batch and the
+        # discounted value of the next state (predicted by the target Q networks)
         target = np.zeros((batch_size, 1))
         target[:, 0] = r_batch + (1 - d_batch) * self.training_param.DECAY_RATE * next_state_value
 
+        # (3) Add information about which action was taken by setting last_action[batch_index, action(batch_index)] = 1
+        last_action = np.zeros((batch_size, self.action_size))
+        last_action[np.arange(batch_size), a_batch] = 1
+
+        # (4) train on batch
         Q1_loss = self.model_Q.train_on_batch([s_batch, last_action], target)
         Q2_loss = self.model_Q2.train_on_batch([s_batch, last_action], target)
 
@@ -320,12 +333,30 @@ class SACNetwork(object):
                                                  batch_size=batch_size).reshape(batch_size, -1)
         action_values_min = np.fmin(action_values_Q1, action_values_Q2)
 
-        # For "deterministic" policy
+        # Attempt to implement according to the papers: ===============================================
+        # policy loss = E [π(s)T [α log(π(s)) − Q(s)]] with expectation over data
+        # target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
+        #
+        # with tf.GradientTape() as tape:
+        #     pi = self.model_policy(s_batch)  # shape (batch_size, action_size)
+        #     log_pi = tf.math.log(pi + 1e-6)  # get log probabilities
+        #     policy_loss = self._alpha * log_pi - action_values_min
+        #     # Do the scalar product for all samples in the batch
+        #     policy_loss = target_pi * policy_loss
+        #     policy_loss = tf.reduce_sum(policy_loss, axis=-1)
+        #     # The loss is the expected loss over the data, so take the mean over the batch as estimate
+        #     policy_loss = tf.reduce_mean(policy_loss)
+        #
+        # # Get the gradient and take an optimizer step
+        # grads = tape.gradient(policy_loss, self.model_policy.trainable_variables)
+        # self.optimizer_policy.apply_gradients(zip(grads, self.model_policy.trainable_variables))
+        # ===============================================================================================
 
+        # ALTERNATIVE: For "deterministic" policy =============================
         # Calculate the "advantage" of all actions as compared to the "optimal" (greedy) action.
         # Advantage = Q(s,a) - V(s) (I have renamed action_v1 --> advantage). All advantage values are <= 0.
-        advantage = action_values_min - np.amax(action_values_min, axis=-1).reshape(batch_size, 1)
 
+        advantage = action_values_min - np.amax(action_values_min, axis=-1).reshape(batch_size, 1)
         temp = self._alpha  # "temperature"
 
         # Calculate a probability distribution over the actions (one distribution for every sample in the batch).
@@ -335,37 +366,31 @@ class SACNetwork(object):
 
         # The loss function used is the categorical cross-ENTROPY loss = - sum_a (new_proba(a) * log(policy(s, a))
         policy_loss = self.model_policy.train_on_batch(s_batch, new_proba_ts)
-
-        # for stochastic policy ...
-        # target_pi = self.model_policy.predict(s_batch, batch_size=batch_size)
-
-        # with tf.GradientTape() as tape:
-        #     pi = self.model_policy(s_batch)
-        #     log_pi = tf.math.log(pi + 1e-6)
-        #     policy_loss = self._alpha * log_pi - action_values_min
-        #     policy_loss = target_pi * policy_loss
-        #     policy_loss = tf.reduce_sum(policy_loss, axis=-1)
-        #     policy_loss = tf.reduce_mean(policy_loss)
-        # grads = tape.gradient(policy_loss, self.model_policy.trainable_variables)
-        # self.optimizer_policy.apply_gradients(zip(grads, self.model_policy.trainable_variables))
+        # =========================================================================
 
         return policy_loss
 
-    def _adjust_alpha(self, a_batch, s2_batch, batch_size):
+    def _adjust_alpha(self, a_batch, s_batch, batch_size):
+        """ TODO: this is not working correctly """
         if not isinstance(self._target_entropy, Number):
             self._target_entropy = 0.0
 
-        action_probabilities = self.model_policy.predict(s2_batch, batch_size=batch_size)
-        #log_pis = np.log(action_probabilities[np.arange(batch_size), a_batch] + 1e-6)
+        action_probabilities = self.model_policy.predict(s_batch, batch_size=batch_size)
         log_pis = np.log(action_probabilities + 1e-6)
 
+        current_entropy = -1.0 * tf.math.reduce_sum(action_probabilities * log_pis, axis=-1)
+        current_entropy = tf.math.reduce_mean(current_entropy)
+        entropy_diff = current_entropy - self._target_entropy
         with tf.GradientTape() as tape:
-            alpha_losses = -1.0 * (self._alpha * log_pis) + self._target_entropy
-            alpha_losses = tf.math.reduce_sum(log_pis * alpha_losses)
-            alpha_loss = tf.math.reduce_mean(alpha_losses)/batch_size
+            alpha_loss = self._log_alpha*tf.math.reduce_mean(entropy_diff)
+            #alpha_losses = -1.0 * (self._log_alpha * tf.stop_gradient(log_pis + self._target_entropy))
+            # Take the expectation over the actions
+            #alpha_losses = tf.math.reduce_sum(action_probabilities * alpha_losses, axis=-1)
+            #alpha_loss = tf.math.reduce_mean(alpha_losses)
 
-        alpha_gradients = tape.gradient(alpha_loss, [self._alpha])
-        self._alpha_optimizer.apply_gradients(zip(alpha_gradients, [self._alpha]))
+        alpha_gradients = tape.gradient(alpha_loss, [self._log_alpha])
+        self._alpha_optimizer.apply_gradients(zip(alpha_gradients, [self._log_alpha]))
+        self._alpha = tf.math.exp(self._log_alpha)
 
         return alpha_loss
 

@@ -20,6 +20,8 @@ class SACAgent(AgentWithConverter):
         self.store_action = store_action
         self.istraining = istraining
 
+        self.epsilon = training_param.INITIAL_EPSILON
+
         self.replay_buffer = ReplayBuffer(training_param.BUFFER_SIZE)
         self.deep_q = None  # Initialise when we know size of observation
         self.tf_writer = None
@@ -54,10 +56,11 @@ class SACAgent(AgentWithConverter):
         # self._store_action_played(res)
         return res
 
-    def _next_move(self, curr_state):
+    def _next_move(self, curr_state, epsilon=0.0):
         """ Used in training. Includes exploration"""
-        action, prob = self.deep_q.predict_movement_stochastic(curr_state)
-        return int(action), prob.numpy()
+        # action, prob = self.deep_q.predict_movement_stochastic(curr_state)
+        action, _ = self.deep_q.predict_movement(curr_state, epsilon=epsilon)
+        return int(action)
 
     def convert_obs(self, observation):
         tmp = np.concatenate((observation.prod_p / 50.0,
@@ -105,8 +108,11 @@ class SACAgent(AgentWithConverter):
                 # Get current/initial state
                 initial_state = self.convert_obs(obs)
 
-                # predict next moves
-                act, act_prob = self._next_move(initial_state)
+                # Slowly decay the exploration parameter epsilon
+                self.epsilon = training_param.get_next_epsilon(current_step=training_step)
+
+                # predict next moves with epsilon chance of random action
+                act = self._next_move(initial_state, epsilon=self.epsilon)
 
                 # Take step and convert obs
                 act_obj = self.convert_act(act)

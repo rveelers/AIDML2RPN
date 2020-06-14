@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
 from grid2op.Action import TopologyChangeAction
 from grid2op.Plot import EpisodeReplay
@@ -37,7 +38,7 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 10000
+    NUM_TRAIN_ITERATIONS = 1001
     num_run_iterations = 1000
     path_grid = 'rte_case5_example'
     train_agent = True
@@ -48,13 +49,16 @@ def main():
 
     save_path = "saved_networks"
     logdir = os.path.join('logs2', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
+    rundir = os.path.join('runs', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
 
     network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS))
 
     if not os.path.exists(network_path):
         os.mkdir(network_path)
     if not os.path.exists(logdir):
-        os.makedirs(logdir)  # TODO
+        os.makedirs(logdir)
+    if not os.path.exists(rundir):
+        os.makedirs(rundir)
 
     # Train the agent
     if train_agent:
@@ -71,7 +75,7 @@ def main():
 
     # Run the agent
     # run_agent(env, my_agent, NUM_RUN_ITERATIONS, plot_replay_episodes=True)
-
+    run_writer = tf.summary.create_file_writer(rundir, name=agent.name)
     obs = environment.reset()
     reward = 0.
     cum_reward = 0.
@@ -88,21 +92,27 @@ def main():
 
         cum_reward += reward
 
+        with run_writer.as_default():
+            tf.summary.scalar("run/reward", reward, i)
+            tf.summary.scalar("run/act", act, i)
+            tf.summary.scalar("run/cum_reward", cum_reward, i)
+
         if act_old != act:
             print(i, act, reward, done)
             print(agent.convert_act(act))
             act_old = act
 
-            if not done:
-                plot_helper = PlotMatplot(environment.observation_space)
-                fig_layout = plot_helper.plot_obs(environment.get_obs())
-                plt.show(fig_layout)
+            #if not done:
+            #    plot_helper = PlotMatplot(environment.observation_space)
+            #    fig_layout = plot_helper.plot_obs(environment.get_obs())
+            #    plt.show(fig_layout)
 
         if done:
             break
 
     print('Total reward: ', i, cum_reward)
     environment.reset()
+
 
 if __name__ == "__main__":
     main()

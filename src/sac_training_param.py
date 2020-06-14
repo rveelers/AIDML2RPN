@@ -24,7 +24,6 @@ class TrainingParamSAC(object):
                  lr=3e-4,  # 1e-5
                  learning_rate_decay_steps=1000,
                  learning_rate_decay_rate=0.95
-                 # True
                  ):
 
         self.DECAY_RATE = DECAY_RATE
@@ -45,7 +44,7 @@ class TrainingParamSAC(object):
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
         self.UPDATE_FREQ = 100  # update tensorboard every "UPDATE_FREQ" steps
-        self.SAVING_NUM = 1000
+        self.SAVING_NUM = 1000  # TODO
 
         self._exp_facto = np.log(self.INITIAL_EPSILON/self.FINAL_EPSILON)
 
