@@ -249,14 +249,14 @@ class SACNetwork(object):
         tau = self.training_param.TAU
 
         # Update Q target
-        Q_weights = self.model_Q.get_weights()
-        Q_target_weights = self.model_Q_target.get_weights()
+        Q_weights = self.model_Q.get_weights().copy()
+        Q_target_weights = self.model_Q_target.get_weights().copy()
         for i in range(len(Q_weights)):
             Q_target_weights[i] = tau * Q_weights[i] + (1 - tau) * Q_target_weights[i]
         self.model_Q_target.set_weights(Q_target_weights)
 
         # Update Q2 target
-        Q2_weights = self.model_Q2.get_weights()
+        Q2_weights = self.model_Q2.get_weights().copy()
         Q2_target_weights = self.model_Q2_target.get_weights()
         for i in range(len(Q2_weights)):
             Q2_target_weights[i] = tau * Q2_weights[i] + (1 - tau) * Q2_target_weights[i]

@@ -38,7 +38,7 @@ def run_agent(environment, agent, num_iterations=100, plot_replay_episodes=True)
 
 
 def main():
-    NUM_TRAIN_ITERATIONS = 1001
+    NUM_TRAIN_ITERATIONS = 10001
     num_run_iterations = 1000
     path_grid = 'rte_case5_example'
     train_agent = True
@@ -48,8 +48,8 @@ def main():
     agent = SACAgent(action_space=environment.action_space)
 
     save_path = "saved_networks"
-    logdir = os.path.join('logs2', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
-    rundir = os.path.join('runs', agent.name, datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
+    logdir = os.path.join('logs2', agent.name + 'New', datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
+    rundir = os.path.join('runs', agent.name + 'New', datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
 
     network_path = os.path.join(save_path, '{}_{}_{}'.format(path_grid, agent.name, NUM_TRAIN_ITERATIONS))
 

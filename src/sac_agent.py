@@ -3,7 +3,8 @@ import tensorflow as tf
 import os
 from tqdm import tqdm
 
-from sac_network import SACNetwork
+# from sac_network import SACNetwork
+from sac_new import SACNetwork
 from sac_training_param import TrainingParamSAC
 from grid2op.Agent import AgentWithConverter
 from grid2op.Converter import IdToAct
@@ -128,7 +129,7 @@ class SACAgent(AgentWithConverter):
                     self.epoch_rewards[epoch_num] += reward
 
                 # Add to replay buffer
-                self.replay_buffer.add(initial_state.squeeze(), act, reward, done, new_state.squeeze())
+                self.replay_buffer.add(initial_state.squeeze().copy(), act, reward, done, new_state.squeeze().copy())
 
                 self._store_action_played_train(training_step, act)
                 self._update_illegal_ambiguous(training_step, info)

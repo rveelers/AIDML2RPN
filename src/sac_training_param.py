@@ -11,10 +11,10 @@ class TrainingParamSAC(object):
     def __init__(self,
                  DECAY_RATE=0.90,
                  BUFFER_SIZE=40000,
-                 MINIBATCH_SIZE=64,  # 64,
+                 MINIBATCH_SIZE=32,  # 64,
                  STEP_FOR_FINAL_EPSILON=100000,  # step at which min_espilon is obtain
                  MIN_OBSERVATION=0,  #64,  # 5000  NOTE: the training does not start before min_observation steps....
-                 FINAL_EPSILON=1./(7*288.),  # have on average 1 random action per week of approx 7*288 time steps
+                 FINAL_EPSILON=  1/300, #1./(7*288.),  # have on average 1 random action per week of approx 7*288 time steps
                  INITIAL_EPSILON=0.4,  # NOTE: epsilon is not really used in the updated version /Johan
                  TAU=0.01,
                  ALPHA=0.2,
@@ -39,7 +39,7 @@ class TrainingParamSAC(object):
         self.ALPHA_LR = ALPHA_LR
         self.AUTOMATIC_ALPHA_TUNING = AUTOMATIC_ALPHA_TUNING
 
-        self.lr = lr  # TODO
+        self.lr = lr  #*MINIBATCH_SIZE # TODO
         self.learning_rate_decay_steps = learning_rate_decay_steps
         self.learning_rate_decay_rate = learning_rate_decay_rate
 
