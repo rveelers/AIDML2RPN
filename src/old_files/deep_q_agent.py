@@ -37,7 +37,7 @@ class OldDeepQAgent(AgentWithConverter):
         """ The DeepQ network uses the rho values and line status values as input. """
         converted_obs = np.concatenate((
             observation.prod_p / 150,
-            observation.load_p / 100,
+            observation.load_p / 120,
             observation.rho / 2,
             observation.timestep_overflow / 10,
             observation.line_status,
@@ -110,7 +110,7 @@ class OldDeepQAgent(AgentWithConverter):
 
         curr_state = np.concatenate(process_buffer)
         epsilon = INITIAL_EPSILON
-        epsilon_decay = (INITIAL_EPSILON - FINAL_EPSILON) / (num_iterations * 0.75)
+        epsilon_decay = (INITIAL_EPSILON - FINAL_EPSILON) / num_iterations
         total_reward = 0
         reset_count = 0
         current_loss = np.inf
@@ -166,17 +166,17 @@ class OldDeepQAgent(AgentWithConverter):
             #     self.deep_q.replace_target()
 
             # Save the network every 100 iterations and it is has the smallest loss so far
-            if iteration % 100 == 99 and current_loss < self.smallest_loss:
+            if iteration % 100 == 99:  # and current_loss < self.smallest_loss:
                 self.smallest_loss = current_loss
                 print("Saving Network, current loss:", current_loss)
                 self.deep_q.save_network(network_path)
 
-            if iteration % 100 == 99 or iteration == num_iterations - 1:
-                with tf_writer.as_default():
-                    tf.summary.scalar("loss", current_loss, iteration)
-                    tf.summary.scalar("action", predict_movement_int, iteration)
-                    mean_reward = np.mean(self.reward_history[-100:])
-                    tf.summary.scalar("mean reward last 100 steps", mean_reward, iteration)
-                    tf.summary.scalar("max q-value", predict_q_value, iteration)
+            # if iteration % 100 == 99 or iteration == num_iterations - 1:
+            with tf_writer.as_default():
+                tf.summary.scalar("loss", current_loss, iteration)
+                tf.summary.scalar("action", predict_movement_int, iteration)
+                mean_reward = np.mean(self.reward_history[-100:])
+                tf.summary.scalar("mean reward last 100 steps", mean_reward, iteration)
+                tf.summary.scalar("max q-value", predict_q_value, iteration)
 
         env.close()
