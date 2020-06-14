@@ -1,4 +1,6 @@
 import os
+import time
+
 import tensorflow as tf
 import numpy as np
 
@@ -34,8 +36,8 @@ class OldDeepQAgent(AgentWithConverter):
     def convert_obs(self, observation):
         """ The DeepQ network uses the rho values and line status values as input. """
         converted_obs = np.concatenate((
-            observation.prod_p / 50,
-            observation.load_p / 20,
+            observation.prod_p / 150,
+            observation.load_p / 100,
             observation.rho / 2,
             observation.timestep_overflow / 10,
             observation.line_status,
@@ -94,7 +96,7 @@ class OldDeepQAgent(AgentWithConverter):
 
     def train(self, env, num_iterations=10000, network_path=None):
         """ Train the agent. """
-        log_path = os.path.join('logs', self.id, 'train')
+        log_path = os.path.join('logs', self.id, 'train', str(time.time()))
         tf_writer = tf.summary.create_file_writer(log_path)
 
         process_buffer = []
