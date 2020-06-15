@@ -26,6 +26,7 @@ class OldDeepQAgent(AgentWithConverter):
         # Stats
         self.action_history = []
         self.reward_history = []
+        self.cumulative_reward = 0
         self.smallest_loss = np.inf
         self.run_step_count = 0
         self.run_tf_writer = None
@@ -46,21 +47,12 @@ class OldDeepQAgent(AgentWithConverter):
             observation.time_before_cooldown_sub / 10))
         if np.any(converted_obs > 1) or np.any(converted_obs < 0):
             print('out of 0-1 scale')
-        # converted_obs = np.concatenate((
-        #     observation.prod_p,
-        #     observation.load_p,
-        #     observation.rho,
-        #     observation.timestep_overflow,
-        #     observation.line_status,
-        #     observation.topo_vect,
-        #     observation.time_before_cooldown_line,
-        #     observation.time_before_cooldown_sub))
         return converted_obs
 
     def my_act(self, transformed_observation, reward, done=False):
         """ This method is called by the environment when using Runner. """
         if self.run_tf_writer is None:
-            log_path = os.path.join('logs', self.id, 'run')
+            log_path = os.path.join('logs', 'run', self.id + '_' + str(time.time()))
             self.run_tf_writer = tf.summary.create_file_writer(log_path)
 
         if self.deep_q is None:
@@ -72,11 +64,13 @@ class OldDeepQAgent(AgentWithConverter):
 
         predict_movement_int, _ = self.deep_q.predict_movement(np.concatenate(self.process_buffer), epsilon=0.0)
         self.action_history.append(predict_movement_int)
+        self.cumulative_reward += reward
         # print(self.convert_act(predict_movement_int))
 
         with self.run_tf_writer.as_default():
             tf.summary.scalar("action", predict_movement_int, self.run_step_count)
             tf.summary.scalar("reward", reward, self.run_step_count)
+            tf.summary.scalar("cumulative reward", self.cumulative_reward, self.run_step_count)
 
         self.run_step_count += 1
 
@@ -96,7 +90,7 @@ class OldDeepQAgent(AgentWithConverter):
 
     def train(self, env, num_iterations=10000, network_path=None):
         """ Train the agent. """
-        log_path = os.path.join('logs', self.id, 'train', str(time.time()))
+        log_path = os.path.join('logs', 'train', self.id + '_' + str(time.time()))
         tf_writer = tf.summary.create_file_writer(log_path)
 
         process_buffer = []
@@ -175,8 +169,7 @@ class OldDeepQAgent(AgentWithConverter):
             with tf_writer.as_default():
                 tf.summary.scalar("loss", current_loss, iteration)
                 tf.summary.scalar("action", predict_movement_int, iteration)
-                mean_reward = np.mean(self.reward_history[-100:])
-                tf.summary.scalar("mean reward last 100 steps", mean_reward, iteration)
+                tf.summary.scalar("reward", reward, iteration)
                 tf.summary.scalar("max q-value", predict_q_value, iteration)
 
         env.close()

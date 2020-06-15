@@ -1,6 +1,7 @@
 import os
 import time
 import numpy as np
+import tensorflow as tf
 
 import matplotlib.pyplot as plt
 from grid2op.Action import TopologyChangeAction, TopologySetAction
@@ -13,6 +14,7 @@ from grid2op.Runner import Runner
 from grid2op.MakeEnv.Make import make
 
 from old_files.deep_q_agent import OldDeepQAgent
+from l2rpn_baselines.DeepQSimple import DeepQSimple
 
 # All available grids, if it gives an error remove the test=True flag in the make command
 grid_paths = [
@@ -85,55 +87,73 @@ def run_agent(environment, agent, num_iterations, plot_replay_episodes=True, use
         reward = 0.
         cum_reward = 0.
         done = False
-        for i in range(num_iterations):
-            act = agent.my_act(agent.convert_obs(obs), reward, done)
-            print('In iteration', i, 'action', act, 'reward', reward)
+        iteration = 0
+        log_path = os.path.join('logs', 'run', agent.id + '_' + str(time.time()))
+        run_tf_writer = tf.summary.create_file_writer(log_path)
+        for iteration in range(num_iterations):
+            # act = agent.my_act(agent.convert_obs(obs), reward, done)
+            predicted_qvalues = agent.deep_q.predict_rewards(agent.convert_obs(obs))
+            sorted_qvalues = np.argsort(predicted_qvalues)[::-1]
+            best_actions = sorted_qvalues[:4]
+            best_action, best_reward = 0, 0.
+            # _, best_reward, _, _ = obs.simulate(agent.convert_act(best_action))
+            for action in best_actions:
+                _, expected_reward, _, _ = obs.simulate(agent.convert_act(action))
+                if expected_reward > best_reward:
+                    best_action = action
+                    best_reward = expected_reward
+
+            print('In iteration', iteration, 'action', best_action, 'reward', reward)
             # print(agent.convert_act(act))
             # plot_grid_observation(environment)
 
             # Calculate predicted and expected rewards
             # expected_rewards = []
-            # predicted_rewards = agent.deep_q.predict_rewards(agent.process_buffer)
             # for action in range(agent.action_space.size()):
             #     _, expected_reward, _, _ = obs.simulate(agent.convert_act(action))
             #     expected_rewards.append(expected_reward)
+            # sorted_rewards = np.argsort(expected_rewards)[::-1]
 
-            obs, reward, done, _ = environment.step(agent.convert_act(act))
+            obs, reward, done, _ = environment.step(agent.convert_act(best_action))
             cum_reward += reward
 
-            if len(agent.action_history) < 2 or agent.action_history[-2] != act:
+            # if len(agent.action_history) < 2 or agent.action_history[-2] != best_action:
                 # print('In iteration', i, 'action', act, 'reward', reward)
-                print(agent.convert_act(act))
+                # print(agent.convert_act(best_action))
 
                 # if not done:
                 #     plot_grid_observation(environment)
 
                 # Plot prediction vs expectation
-                # plt.plot(predicted_rewards)
-                # plt.plot(np.array(expected_rewards) * (max(predicted_rewards) / max(expected_rewards)))
-                # plt.show()
+            # plt.plot(predicted_qvalues)
+            # plt.plot(np.array(expected_rewards) * (max(predicted_qvalues) / max(expected_rewards)))
+            # plt.show()
+
+            with run_tf_writer.as_default():
+                tf.summary.scalar("action", best_action, iteration)
+                tf.summary.scalar("reward", reward, iteration)
+                tf.summary.scalar("cumulative reward", cum_reward, iteration)
 
             if done:
                 break
 
-        print(i, 'timesteps, reward:', cum_reward)
+        print(iteration, 'timesteps, reward:', cum_reward)
 
 
 if __name__ == "__main__":
     # Initialize the environment and agent
-    path_grid = "rte_case5_example"
-    # path_grid = "rte_case14_redisp"
-    env = make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologyChangeAction)
-    # env = make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologySetAction)
-    # env = make(path_grid, reward_class=L2RPNReward)
+    # path_grid = "rte_case5_example"
+    path_grid = "rte_case14_redisp"
+    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction)
+    # env = make(path_grid, reward_class=L2RPNReward, action_class=TopologySetAction)
 
-    # my_agent = DeepQAgent(env.action_space, store_action=True)
+    # my_agent = DeepQSimple(env.action_space, store_action=True)
     my_agent = OldDeepQAgent(env.action_space)
 
     num_states = my_agent.convert_obs(env.reset()).shape[0]
-    num_actions = env.action_space.size()
-    num_training_iterations = 10000
-    num_run_iterations = 1000
+    num_actions = my_agent.action_space.size()
+    num_training_iterations = 5000
+    num_run_iterations = 5000
 
     print('State space size:', num_states)
     print('Action space size:', num_actions)
@@ -160,4 +180,6 @@ if __name__ == "__main__":
     train_agent(my_agent, env, num_iterations=num_training_iterations)
 
     # Run the agent
-    # run_agent(env, my_agent, num_iterations=num_run_iterations, plot_replay_episodes=True, use_runner=False)
+    path_grid = "rte_case14_realistic"
+    env = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction)
+    run_agent(env, my_agent, num_iterations=num_run_iterations, plot_replay_episodes=True, use_runner=False)

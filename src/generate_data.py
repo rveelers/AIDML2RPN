@@ -12,25 +12,27 @@ from grid2op.Reward import L2RPNReward
 
 
 def convert_obs(observation):
-    return np.concatenate((observation.prod_p,
-                           observation.load_p,
-                           observation.rho,
-                           observation.timestep_overflow,
-                           observation.line_status,
-                           observation.topo_vect,
-                           observation.time_before_cooldown_line,
-                           observation.time_before_cooldown_sub,
-                           )).reshape(1, -1)
+    return np.concatenate((
+        observation.prod_p / 150,
+        observation.load_p / 120,
+        observation.rho / 2,
+        observation.timestep_overflow / 10,
+        observation.line_status,
+        (observation.topo_vect + 1) / 3,
+        observation.time_before_cooldown_line / 10,
+        observation.time_before_cooldown_sub / 10))
 
 
-path_grid = "rte_case5_example"
-env = make(path_grid, test=True, reward_class=L2RPNReward, action_class=TopologyChangeAction)
+path_grid = "rte_case14_redisp"
+env = make(path_grid, reward_class=L2RPNReward, action_class=TopologyChangeAction)
 obs = env.reset()
 
 run_id = 0
 n = 1000
-num_states = convert_obs(obs).shape[1]
-num_actions = env.action_space.size()
+num_states = convert_obs(obs).shape[0]
+# num_actions = env.action_space.size()
+# num_actions = 251
+num_actions = 191
 print('State space size:', num_states)
 print('Action space size:', num_actions)
 
@@ -47,10 +49,10 @@ for i in range(n):
     states[i] = convert_obs(obs)
     st = time.time()
 
-    for act_id in range(env.action_space.size()):
-        env_copy = deepcopy(env)
+    for act_id in range(num_actions):
+        # env_copy = deepcopy(env)
         act = converter.convert_act(act_id)
-        obs, reward, done, _ = env_copy.step(act)
+        _, reward, _, _ = obs.simulate(act)
         rewards[i, act_id] = reward
         # print(act)
         # print(reward)
