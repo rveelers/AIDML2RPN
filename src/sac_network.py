@@ -149,7 +149,7 @@ class SACNetwork(object):
         self.alpha_loss_30 = deque(maxlen=30)
 
     def predict_movement_stochastic(self, data, batch_size=None):
-        """ Stochastic policy """
+        """ Stochastic policy -- TODO: not used """
         if batch_size is None:
             batch_size = data.shape[0]
         # Policy outputs a probability distribution over the actions

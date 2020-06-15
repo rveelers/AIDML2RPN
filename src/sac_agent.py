@@ -52,10 +52,16 @@ class SACAgent(AgentWithConverter):
         """ Used when evaluating the agent """
         if self.deep_q is None:
             self.init_deep_q(transformed_observation)
-        predict_movement_int, *_ = self.deep_q.predict_movement(transformed_observation)
+        predict_movement_int, probs = self.deep_q.predict_movement(transformed_observation)
         res = int(predict_movement_int)
-        # self._store_action_played(res)
         return res
+
+    def my_acts(self, transformed_observation, nr_acts):
+        """ Used when evaluating the agent """
+        if self.deep_q is None:
+            self.init_deep_q(transformed_observation)
+        acts, probs = self.deep_q.predict_movement_evaluate(transformed_observation, nr_acts)
+        return acts, probs
 
     def _next_move(self, curr_state, epsilon=0.0):
         """ Used in training. Includes exploration"""
@@ -64,17 +70,17 @@ class SACAgent(AgentWithConverter):
         return int(action)
 
     def convert_obs(self, observation):
-        tmp = np.concatenate((observation.prod_p / 50.0,
-                              observation.load_p / 20.0,
-                              observation.rho / 2.0,
-                              observation.timestep_overflow / 10.0,
-                              observation.line_status,
-                              observation.topo_vect,
-                              observation.time_before_cooldown_line / 10.0,
-                              observation.time_before_cooldown_sub / 10.0,
-                              )).reshape(1, -1)
+        tmp = np.concatenate((
+            observation.prod_p / 150,
+            observation.load_p / 120,
+            observation.rho / 2,
+            observation.timestep_overflow / 10,
+            observation.line_status,
+            (observation.topo_vect + 1) / 3,
+            observation.time_before_cooldown_line / 10,
+            observation.time_before_cooldown_sub / 10)).reshape(1, -1)
 
-        if self._tmp_obs is None:  # TODO: why?
+        if self._tmp_obs is None:
             self._tmp_obs = np.zeros((1, tmp.shape[1]), dtype=np.float32)
         else:
             self._tmp_obs[:] = tmp

@@ -35,7 +35,7 @@ class SACNetwork(object):
         lay2 = Dense(self.observation_size)(lay1)
         lay2 = Activation('relu')(lay2)
 
-        lay3 = Dense(500)(lay2)
+        lay3 = Dense(self.action_size*2)(lay2)
         lay3 = Activation('relu')(lay3)
 
         advantage = Dense(1, activation='linear')(lay3)
@@ -50,7 +50,10 @@ class SACNetwork(object):
         lay1 = Dense(self.observation_size)(input_states)
         lay1 = Activation('relu')(lay1)
 
-        lay3 = Dense(500)(lay1)
+        lay2 = Dense(self.observation_size)(lay1)
+        lay2 = Activation('relu')(lay2)
+
+        lay3 = Dense(self.action_size*2)(lay2)
         lay3 = Activation('relu')(lay3)
 
         advantage = Dense(self.action_size, activation='relu')(lay3)
@@ -63,13 +66,14 @@ class SACNetwork(object):
     def _build_policy_NN(self):
         """ Build policy network as in the baseline SAC """
         input_states = Input(shape=(self.observation_size,))
+
         lay1 = Dense(self.observation_size)(input_states)
         lay1 = Activation('relu')(lay1)
 
         lay2 = Dense(self.observation_size)(lay1)
         lay2 = Activation('relu')(lay2)
 
-        lay3 = Dense(500)(lay2)
+        lay3 = Dense(self.action_size*2)(lay2)
         lay3 = Activation('relu')(lay3)
 
         soft_proba = Dense(self.action_size, activation="softmax", kernel_initializer='uniform')(lay3)
@@ -131,6 +135,16 @@ class SACNetwork(object):
         # Get probability for the chosen action
         prob = m.prob(action)
         return action, prob
+
+    def predict_movement_evaluate(self, data, nr_acts):
+        # Policy outputs a probability distribution over the actions
+        p_actions = self.model_policy.predict(data, batch_size=1).squeeze()
+
+        # Choose the nr_acts actions with the highest probabilities
+        best_actions = np.argsort(p_actions)[::-1]
+        best_actions = best_actions[:nr_acts]
+
+        return best_actions, p_actions[best_actions]
 
     def predict_movement(self, data, batch_size=None, epsilon=0.0):
         """ Predict movement "deterministic"  """
@@ -218,7 +232,7 @@ class SACNetwork(object):
         target_model_weights = self.model_value_target.get_weights()
         for i in range(len(model_weights)):
             target_model_weights[i] = TAU * model_weights[i] + (1 - TAU) * target_model_weights[i]
-        self.model_value_target.set_weights(model_weights)
+        self.model_value_target.set_weights(target_model_weights)
 
     def _train_Q_networks(self, s_batch, a_batch, r_batch, d_batch, s2_batch, batch_size):
         # (1) Find the current estimate of the next state value.
