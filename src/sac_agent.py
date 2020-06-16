@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import os
 from tqdm import tqdm
+from collections import deque
 
 # from sac_network import SACNetwork
 from sac_new import SACNetwork
@@ -42,6 +43,9 @@ class SACAgent(AgentWithConverter):
 
         self.obs_as_vect = None
         self._tmp_obs = None
+
+        self.total_load_100 = deque(maxlen=100)
+        self.total_prod_100 = deque(maxlen=100)
 
     def init_deep_q(self, transformed_observation):
         self.deep_q = SACNetwork(self.action_space.size(),
@@ -124,6 +128,10 @@ class SACAgent(AgentWithConverter):
                 # Take step and convert obs
                 act_obj = self.convert_act(act)
                 obs, reward, done, info = env.step(act_obj)
+
+                self.total_load_100.append(sum(obs.load_p))
+                self.total_prod_100.append(sum(obs.prod_p))
+
                 new_state = self.convert_obs(obs)
 
                 if done:
@@ -133,6 +141,9 @@ class SACAgent(AgentWithConverter):
                 else:
                     self.epoch_num_steps_alive[epoch_num] += 1
                     self.epoch_rewards[epoch_num] += reward
+
+                # if act_obj.impact_on_objects()['has_impact']:
+                #  self.replay_buffer.add(initial_state.squeeze().copy(), act, reward, done, new_state.squeeze().copy())
 
                 # Add to replay buffer
                 self.replay_buffer.add(initial_state.squeeze().copy(), act, reward, done, new_state.squeeze().copy())
@@ -195,7 +206,13 @@ class SACAgent(AgentWithConverter):
                 mean_reward_30 = mean_reward
                 mean_alive_30 = mean_alive
 
+            max_total_load_100 = np.amax(self.total_load_100)
+            max_total_prod_100 = np.amax(self.total_prod_100)
+
             # show first the Mean reward and mine time alive (hence the upper case)
+            tf.summary.scalar("states/max_total_load_100", max_total_load_100, training_step)
+            tf.summary.scalar("states/max_total_prod_100", max_total_prod_100, training_step)
+
             tf.summary.scalar("length_of_epochs/last_epoch", last_alive, training_step)
             tf.summary.scalar("length_of_epochs/mean_30", mean_alive_30, training_step)
             tf.summary.scalar("length_of_epochs/total_mean", mean_alive, training_step)
