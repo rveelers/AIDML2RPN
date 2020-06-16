@@ -15,7 +15,8 @@ with warnings.catch_warnings():
     import tensorflow.keras.optimizers as tfko
     from tensorflow.keras.models import load_model
 
-from l2rpn_baselines.utils import BaseDeepQ  # Baseline Q network.
+from l2rpn_baselines_old.utils import BaseDeepQ  # Baseline Q network.
+from l2rpn_baselines_old.utils.ReplayBuffer import ReplayBuffer
 from sac_training_param import TrainingParamSAC
 
 
@@ -121,6 +122,32 @@ class SACNetwork(object):
         self.policy_loss_30 = deque(maxlen=30)
         self.value_loss_30 = deque(maxlen=30)
         self.alpha_loss_30 = deque(maxlen=30)
+
+    def imitation_learning_training(self, path_states, path_rewards):
+        batch_size = 8
+
+        states = np.load(path_states, allow_pickle=True)
+        rewards = np.load(path_rewards, allow_pickle=True)
+
+        replay_buffer = ReplayBuffer(buffer_size=10000)
+
+        for s, reward_vec in zip(states, rewards):
+            for a, r in enumerate(reward_vec):
+                done = None
+                s2 = None
+                replay_buffer.add(s, a, r, done, s2)
+
+        for episode in range(NUM_EPISODES):
+            s_batch, a_batch, r_batch, _, _ = replay_buffer.sample(batch_size)
+
+            a_batch_onehot = np.zeros((batch_size, self.action_size))
+            a_batch_onehot[np.arange(batch_size), a_batch] = 1
+
+            # (4) train on batch
+            Q1_loss = self.model_Q.train_on_batch([s_batch, a_batch_onehot], r_batch)
+            Q2_loss = self.model_Q2.train_on_batch([s_batch, a_batch_onehot], r_batch)
+
+        return None
 
     def predict_movement_stochastic(self, data, batch_size=None):
         """ Stochastic policy """

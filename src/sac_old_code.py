@@ -5,9 +5,9 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from numbers import Number
 
-from l2rpn_baselines.SAC.SAC_NN import SAC_NN
-from l2rpn_baselines.utils import BaseDeepQ
-# from l2rpn_baselines.utils import TrainingParam
+from l2rpn_baselines_old.SAC.SAC_NN import SAC_NN
+from l2rpn_baselines_old.utils import BaseDeepQ
+# from l2rpn_baselines_old.utils import TrainingParam
 
 from sac_training_param import TrainingParamSAC
 

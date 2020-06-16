@@ -8,7 +8,7 @@ from sac_new import SACNetwork
 from sac_training_param import TrainingParamSAC
 from grid2op.Agent import AgentWithConverter
 from grid2op.Converter import IdToAct
-from l2rpn_baselines.utils.ReplayBuffer import ReplayBuffer
+from l2rpn_baselines_old.utils.ReplayBuffer import ReplayBuffer
 
 
 class SACAgent(AgentWithConverter):

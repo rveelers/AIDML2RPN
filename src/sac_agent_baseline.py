@@ -5,8 +5,8 @@ import tensorflow as tf
 import os
 from tqdm import tqdm
 
-from l2rpn_baselines.SAC import SAC  # <-- baseline SAC agent, very similar to DeepQAgent
-from l2rpn_baselines.SAC.SAC import SAC_NN
+from l2rpn_baselines_old.SAC import SAC  # <-- baseline SAC agent, very similar to DeepQAgent
+from l2rpn_baselines_old.SAC.SAC import SAC_NN
 
 from sac_network import SACNetwork
 from sac_training_param import TrainingParamSAC

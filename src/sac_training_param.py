@@ -1,4 +1,4 @@
-""" This class is copied and edited from l2rpn_baselines.utils.TrainingParam """
+""" This class is copied and edited from l2rpn_baselines_old.utils.TrainingParam """
 import numpy as np
 
 

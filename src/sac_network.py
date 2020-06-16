@@ -15,7 +15,7 @@ with warnings.catch_warnings():
     import tensorflow.keras.optimizers as tfko
     from tensorflow.keras.models import load_model
 
-from l2rpn_baselines.utils import BaseDeepQ  # Baseline Q network.
+from l2rpn_baselines_old.utils import BaseDeepQ  # Baseline Q network.
 from sac_training_param import TrainingParamSAC
 
 
