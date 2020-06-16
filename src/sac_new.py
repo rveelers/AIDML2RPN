@@ -237,7 +237,7 @@ class SACNetwork(object):
             self.Q_loss_30.append(Q_loss)
             self.Q2_loss_30.append(Q2_loss)
             self.policy_loss_30.append(policy_loss)
-            self.value_loss_30.append(policy_loss)
+            self.value_loss_30.append(value_loss)
 
             if (self.life_spent-1) % 10 == 0:  # Change for less updates
                 with tf_writer.as_default():
