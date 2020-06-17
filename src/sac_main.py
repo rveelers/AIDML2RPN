@@ -120,7 +120,7 @@ def run_do_nothing(num_run_iterations):
 
     plt.plot(tot_prod)
     plt.plot(tot_load)
-    plt.legend(['Total load', 'Total production'])
+    plt.legend(['Total production', 'Total load'])
     plt.xlabel('timestep')
     plt.ylabel('Power [MW]')
 
