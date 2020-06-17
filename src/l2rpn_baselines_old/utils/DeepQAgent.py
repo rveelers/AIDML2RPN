@@ -125,9 +125,9 @@ class DeepQAgent(AgentWithConverter):
 
     # baseline interface
     def load(self, path):
-        # not modified compare to original implementation
-        if not os.path.exists(path):
-            raise RuntimeError("The model should be stored in \"{}\". But this appears to be empty".format(path))
+        # not modified compare to original implementation  # TODO yes now
+        # if not os.path.exists(path):
+        #    raise RuntimeError("The model should be stored in \"{}\". But this appears to be empty".format(path))
         try:
             self.deep_q.load_network(path, name=self.name)
         except Exception as e:
