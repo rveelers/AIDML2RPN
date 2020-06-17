@@ -46,6 +46,7 @@ class SACAgent(AgentWithConverter):
 
         self.total_load_100 = deque(maxlen=100)
         self.total_prod_100 = deque(maxlen=100)
+        self.q_selected_100 = deque(maxlen=100)
 
     def init_deep_q(self, transformed_observation):
         self.deep_q = SACNetwork(self.action_space.size(),
@@ -71,7 +72,16 @@ class SACAgent(AgentWithConverter):
         """ Used in training. Includes exploration"""
         # action, prob = self.deep_q.predict_movement_stochastic(curr_state)
         action, _ = self.deep_q.predict_movement(curr_state, epsilon=epsilon)
-        return int(action)
+
+        # Get estimated Q-value of selected action
+        action_size = self.deep_q.action_size
+        a_onehot = np.zeros((1, action_size))
+        a_onehot[0, action] = 1
+        Q1 = self.deep_q.model_Q.predict([curr_state, a_onehot], batch_size=1)
+        Q2 = self.deep_q.model_Q.predict([curr_state, a_onehot], batch_size=1)
+        Q = np.fmin(Q1, Q2)[0, 0]
+
+        return int(action), Q
 
     def convert_obs(self, observation):
         tmp = np.concatenate((
@@ -123,7 +133,7 @@ class SACAgent(AgentWithConverter):
                 self.epsilon = training_param.get_next_epsilon(current_step=training_step)
 
                 # predict next moves with epsilon chance of random action
-                act = self._next_move(initial_state, epsilon=self.epsilon)
+                act, q_selected = self._next_move(initial_state, epsilon=self.epsilon)
 
                 # Take step and convert obs
                 act_obj = self.convert_act(act)
@@ -131,6 +141,11 @@ class SACAgent(AgentWithConverter):
 
                 self.total_load_100.append(sum(obs.load_p))
                 self.total_prod_100.append(sum(obs.prod_p))
+
+                self.q_selected_100.append(q_selected)
+                if self.tf_writer is not None:
+                    with self.tf_writer.as_default():
+                        tf.summary.scalar("q_selected", q_selected,training_step)
 
                 new_state = self.convert_obs(obs)
 

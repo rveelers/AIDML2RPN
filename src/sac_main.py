@@ -82,7 +82,7 @@ def load_sac(network_path):
 
 
 def run_do_nothing(num_run_iterations):
-    environment = make('rte_case14_redisp', reward_class=L2RPNReward, action_class=TopologyChangeAction, test=False)
+    environment = make('rte_case14_realistic', reward_class=L2RPNReward, action_class=TopologyChangeAction, test=False)
     agent = DoNothingAgent(environment.action_space)
 
     rundir = os.path.join('runs', 'DoNothingAgent', datetime.now().strftime("%Y-%m-%d_%H.%M.%S"))
@@ -152,12 +152,14 @@ def run_sac_new(agent, num_run_iterations):
         # Simulate 0-action and the top 4 proposed actions and pick the top one
         #act = 0
         #_, rw_to_beat, _, _ = obs.simulate(agent.convert_act(act))
-        rw_to_beat = -100000
-        for act_proposal in acts:
-            _, rw_proposal, _, _ = obs.simulate(agent.convert_act(act_proposal))
-            if rw_proposal > rw_to_beat:
-                act = act_proposal
-                rw_to_beat = rw_proposal
+        # rw_to_beat = -100000
+        # for act_proposal in acts:
+        #    _, rw_proposal, _, _ = obs.simulate(agent.convert_act(act_proposal))
+        #    if rw_proposal > rw_to_beat:
+        #        act = act_proposal
+        #        rw_to_beat = rw_proposal
+
+        act = acts[0]
 
         if act != act_old:
             print(agent.convert_act(act))
@@ -183,7 +185,7 @@ def run_sac_new(agent, num_run_iterations):
 
     plt.plot(tot_prod)
     plt.plot(tot_load)
-    plt.legend(['Total load', 'Total production'])
+    plt.legend(['Total production', 'Total load'])
     plt.xlabel('timestep')
     plt.ylabel('Power [MW]')
 
@@ -197,7 +199,7 @@ def run_sac_new(agent, num_run_iterations):
         print(act, agent.convert_act(act))
 
 def main():
-    NUM_TRAIN_ITERATIONS = 5005
+    NUM_TRAIN_ITERATIONS = 5006
     NUM_RUN_ITERATIONS = 5000
     path_grid = 'rte_case14_redisp'
     save_path = "saved_networks"
@@ -221,11 +223,11 @@ def main():
         agent.train(environment, NUM_TRAIN_ITERATIONS, network_path, logdir=logdir, training_param=TrainingParamSAC())
 
     if run_agent:
-        #run_do_nothing(NUM_RUN_ITERATIONS)
+        run_do_nothing(NUM_RUN_ITERATIONS)
 
-        environment, agent = load_sac(r'C:\Users\johan\Documents\GitHub\AIDML2RPN\src\saved_networks\rte_case14_redisp_SACAgentNew_702')
-        #run_sac_new(agent, NUM_RUN_ITERATIONS)
-        plot_grid_layout(environment)
+        # environment, agent = load_sac(r'C:\Users\johan\Documents\GitHub\AIDML2RPN\src\saved_networks\rte_case14_redisp_SACAgent_50000')
+        # run_sac_new(agent, NUM_RUN_ITERATIONS)
+        # plot_grid_layout(environment)
 
         #run_baseline(NUM_RUN_ITERATIONS)
 
