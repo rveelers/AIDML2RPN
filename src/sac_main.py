@@ -142,11 +142,11 @@ def main():
     # SETTINGS ========================================
     NUM_TRAIN_ITERATIONS = 5000
     NUM_RUN_ITERATIONS = 5000
-    path_grid = 'rte_case14_redisp'
+    path_grid = 'rte_case14_redisp'  # For training
     save_path = "saved_networks"
 
     train_agent = False
-    run_agent = False  # Make sure the
+    run_agent = True  # Make sure the path below is set to the agent that should be ran
     run_agent_path = r'C:\Users\johan\Documents\GitHub\AIDML2RPN\src\saved_networks\rte_case14_redisp_SACAgentNew_5000'
     run_name = 'SacAgentNew'
     # ==================================================
