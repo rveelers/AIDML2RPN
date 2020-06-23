@@ -1,7 +1,7 @@
 .idea/
 *__pycache__/
 *.h5
-src/Agents/
+src/agents/
 src/saved_networks/
 src/logs
 src/logs2
