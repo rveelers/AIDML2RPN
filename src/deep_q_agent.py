@@ -72,8 +72,9 @@ class DeepQAgent(AgentWithConverter):
             sorted_qvalues = np.argsort(predicted_qvalues)[::-1]
             if allow_actions_once:
                 sorted_qvalues = [value for value in sorted_qvalues if value not in self.action_history]
+
+            # Pick the action with the highest simulated reward among the top four
             best_actions = sorted_qvalues[:4]
-            print(best_actions)
             best_action, best_reward = 0, 0.
             _, best_reward, _, _ = obs.simulate(self.convert_act(best_action))
             for action in best_actions:
