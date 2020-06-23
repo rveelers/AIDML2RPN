@@ -1,50 +1,38 @@
-""" This class is copied and edited from l2rpn_baselines_old.utils.TrainingParam """
+"""Define TrainingParamSAC containing training parameters for SACAgent and SACNetwork."""
 import numpy as np
 
 
 class TrainingParamSAC(object):
-    """
-    A class to store the training parameters of the models. It was hard coded in the getting_started/notebook 3
-    of grid2op and put in this repository instead.
+    """"Training parameters in a class for convenience.
+
+    Inspired by the L2RPN baseline repository: https://github.com/rte-france/l2rpn-baselines/
     """
 
     def __init__(self,
                  DECAY_RATE=0.90,
                  BUFFER_SIZE=40000,
                  MINIBATCH_SIZE=64,
-                 STEP_FOR_FINAL_EPSILON=5000,  # TODO
+                 STEP_FOR_FINAL_EPSILON=5000,
                  MIN_OBSERVATION=0,
                  FINAL_EPSILON=1/300,
                  INITIAL_EPSILON=0.5,
                  TAU=0.01,
-                 ALPHA=0.2,
-                 NUM_FRAMES=1,
-                 ALPHA_LR=3e-4,  # TODO not usedd
-                 AUTOMATIC_ALPHA_TUNING=False,
-                 lr=1e-5,  # 1e-5
-                 learning_rate_decay_steps=1000,
-                 learning_rate_decay_rate=0.95
+                 lr=1e-5,
+                 UPDATE_FREQ=100,  # Update tensorboard every UPDATE_FREQ steps.
+                 SAVING_NUM=1000  # Save network every SAVING_NUM steps.
                  ):
 
         self.DECAY_RATE = DECAY_RATE
         self.BUFFER_SIZE = BUFFER_SIZE
         self.MINIBATCH_SIZE = MINIBATCH_SIZE
-        self.MIN_OBSERVATION = MIN_OBSERVATION  # 5000
-        self.FINAL_EPSILON = float(FINAL_EPSILON)  # have on average 1 random action per day of approx 288 timesteps at the end (never kill completely the exploration)
+        self.MIN_OBSERVATION = MIN_OBSERVATION
+        self.FINAL_EPSILON = float(FINAL_EPSILON)
         self.INITIAL_EPSILON = float(INITIAL_EPSILON)
         self.STEP_FOR_FINAL_EPSILON = float(STEP_FOR_FINAL_EPSILON)
         self.TAU = TAU
-        self.NUM_FRAMES = NUM_FRAMES
-        self.ALPHA = ALPHA
-        self.ALPHA_LR = ALPHA_LR
-        self.AUTOMATIC_ALPHA_TUNING = AUTOMATIC_ALPHA_TUNING
-
-        self.lr = lr  #*MINIBATCH_SIZE # TODO
-        self.learning_rate_decay_steps = learning_rate_decay_steps
-        self.learning_rate_decay_rate = learning_rate_decay_rate
-
-        self.UPDATE_FREQ = 100  # update tensorboard every "UPDATE_FREQ" steps
-        self.SAVING_NUM = 1000  # TODO
+        self.lr = lr
+        self.UPDATE_FREQ = UPDATE_FREQ
+        self.SAVING_NUM = SAVING_NUM
 
         self._exp_facto = np.log(self.INITIAL_EPSILON/self.FINAL_EPSILON)
 

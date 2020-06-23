@@ -1,47 +1,47 @@
+"""Define SACAgent."""
 import numpy as np
 import tensorflow as tf
 import os
 from tqdm import tqdm
 from collections import deque
 
-# from sac_network import SACNetwork
 from sac_new import SACNetwork
 from sac_training_param import TrainingParamSAC
 from grid2op.Agent import AgentWithConverter
 from grid2op.Converter import IdToAct
-from l2rpn_baselines_old.utils.ReplayBuffer import ReplayBuffer
+from replay_buffer import ReplayBuffer
 
 
 class SACAgent(AgentWithConverter):
-    def __init__(self, action_space, name='SACAgent', training_param=TrainingParamSAC(), store_action=False,
-                 istraining=False):
+    """Implementation of a SAC agent for Grid2Op.
+
+    The code is inspired by the L2RPN baseline repository:
+    https://github.com/rte-france/l2rpn-baselines/tree/master/l2rpn_baselines
+    but most functions have been changed.
+    """
+    def __init__(self, action_space, name='SACAgent', training_param=TrainingParamSAC()):
 
         AgentWithConverter.__init__(self, action_space, action_space_converter=IdToAct)
+        # Class with parameters for training
         self.training_param = training_param
         self.name = name
-        self.store_action = store_action
-        self.istraining = istraining
 
+        # Exploration parameter epsilon
         self.epsilon = training_param.INITIAL_EPSILON
 
         self.replay_buffer = ReplayBuffer(training_param.BUFFER_SIZE)
-        self.deep_q = None  # Initialise when we know size of observation
+        self.deep_q = None
         self.tf_writer = None
         self.graph_saved = False
 
         # Statistics
-        self.losses = None
         self.epoch_num_steps_alive = None
         self.epoch_rewards = None
-        self.reset_num = None
-
-        self.dict_action = {}
 
         self.actions_per_1000steps = np.zeros((1000, self.action_space.size()), dtype=np.int)
         self.illegal_actions_per_1000steps = np.zeros(1000, dtype=np.int)
         self.ambiguous_actions_per_1000steps = np.zeros(1000, dtype=np.int)
 
-        self.obs_as_vect = None
         self._tmp_obs = None
 
         self.total_load_100 = deque(maxlen=100)
@@ -49,12 +49,13 @@ class SACAgent(AgentWithConverter):
         self.q_selected_100 = deque(maxlen=100)
 
     def init_deep_q(self, transformed_observation):
+        """Initialize the network."""
         self.deep_q = SACNetwork(self.action_space.size(),
                                  observation_size=transformed_observation.shape[-1],
                                  training_param=self.training_param)
 
     def my_act(self, transformed_observation, reward, done=False):
-        """ Used when evaluating the agent """
+        """Get the action suggested by the policy. Used when evaluating the agent."""
         if self.deep_q is None:
             self.init_deep_q(transformed_observation)
         predict_movement_int, probs = self.deep_q.predict_movement(transformed_observation)
@@ -62,14 +63,17 @@ class SACAgent(AgentWithConverter):
         return res
 
     def my_acts(self, transformed_observation, nr_acts):
-        """ Used when evaluating the agent """
+        """ Get the nr_acts top actions suggested by the policy. Used when evaluating the agent."""
         if self.deep_q is None:
             self.init_deep_q(transformed_observation)
         acts, probs = self.deep_q.predict_movement_evaluate(transformed_observation, nr_acts)
         return acts, probs
 
     def _next_move(self, curr_state, epsilon=0.0):
-        """ Used in training. Includes exploration"""
+        """ Get the action suggested by the policy, or a random act with epsilon probability.
+
+        Return the action (integer) and the associated Q-value, as predicted by the Q-networks.
+        """
         # action, prob = self.deep_q.predict_movement_stochastic(curr_state)
         action, _ = self.deep_q.predict_movement(curr_state, epsilon=epsilon)
 
@@ -84,6 +88,7 @@ class SACAgent(AgentWithConverter):
         return int(action), Q
 
     def convert_obs(self, observation):
+        """ Convert the observation into a vector. Do manual rescaling to get values approximately in [0, 1]. """
         tmp = np.concatenate((
             observation.prod_p / 150,
             observation.load_p / 120,
@@ -101,6 +106,14 @@ class SACAgent(AgentWithConverter):
         return self._tmp_obs
 
     def train(self, env, iterations, save_path, logdir, training_param):
+        """Train the agent for the specified number of iterations.
+
+        env: environment.
+        iterations: number of training iterations.
+        save_path: path for saving networks.
+        logdir: path for saving tensorboard logs.
+        training_param: class with training parameters.
+        """
         # efficient reading of the data (read them by chunk of roughly 1 day
         nb_ts_one_day = 24 * 60 / 5  # number of time steps per day
         self.set_chunk(env, nb_ts_one_day)
@@ -114,10 +127,8 @@ class SACAgent(AgentWithConverter):
         if logdir is not None:
             self.tf_writer = tf.summary.create_file_writer(logdir, name=self.name)
 
-        self.losses = np.zeros(iterations)
         self.epoch_num_steps_alive = np.zeros(iterations)
         self.epoch_rewards = np.zeros(iterations)
-        self.reset_num = 0
 
         # Initialize the NN with proper shape
         obs = env.reset()
@@ -157,9 +168,6 @@ class SACAgent(AgentWithConverter):
                     self.epoch_num_steps_alive[epoch_num] += 1
                     self.epoch_rewards[epoch_num] += reward
 
-                # if act_obj.impact_on_objects()['has_impact']:
-                #  self.replay_buffer.add(initial_state.squeeze().copy(), act, reward, done, new_state.squeeze().copy())
-
                 # Add to replay buffer
                 self.replay_buffer.add(initial_state.squeeze().copy(), act, reward, done, new_state.squeeze().copy())
 
@@ -183,8 +191,8 @@ class SACAgent(AgentWithConverter):
                 pbar.update(1)
 
     def _train_model(self, training_param, training_step):
+        """Train the networks on a batch of data from the replay buffer. Return True iff all losses are finite."""
         losses_are_all_finite = True
-
         if training_step > max(training_param.MIN_OBSERVATION, training_param.MINIBATCH_SIZE):
             # Get batch of training samples from buffer
             s_batch, a_batch, r_batch, d_batch, s2_batch = self.replay_buffer.sample(training_param.MINIBATCH_SIZE)
@@ -198,6 +206,7 @@ class SACAgent(AgentWithConverter):
         return losses_are_all_finite
 
     def _save_tensorboard(self, epoch_num, training_step, epoch_rewards, epoch_alive):
+        """Save statistics to Tensorboard logs."""
         if self.tf_writer is None:
             return
 
@@ -240,7 +249,7 @@ class SACAgent(AgentWithConverter):
             tf.summary.scalar("actions/nb_illegal_act_1000", nb_illegal_act, training_step)
             tf.summary.scalar("actions/nb_ambiguous_act_1000", nb_ambiguous_act, training_step)
 
-    # utilities for data reading
+    # Utilities for data reading. The functions below are from the L2RPN baseline repository.
     def set_chunk(self, env, nb):
         env.set_chunk_size(int(max(100, nb)))
 

@@ -9,3 +9,4 @@ src/logs2old
 src/runs
 src/logs-eval
 *.gif
+/src/runs/
