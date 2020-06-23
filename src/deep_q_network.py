@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow.python.keras import Sequential, Input
-from tensorflow.python.keras.layers import Dense, Activation, BatchNormalization
+from tensorflow.python.keras.layers import Dense, Activation
 from tensorflow.python.keras.models import Model, load_model
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 
@@ -23,13 +23,13 @@ class DeepQ(object):
         self.construct_q_network()
 
     def construct_q_network(self):
+        """ Construct both the actual Q-network and the target network with three hidden layers and ReLu activation
+        functions in between. The network uses an Adam optimizer with MSE loss."""
+
         self.model = Sequential()
         input_layer = Input(shape=(self.observation_size * NUM_FRAMES,))
-        # norm_layer = BatchNormalization(axis=1)(input_layer)
         layer1 = Dense(self.observation_size * NUM_FRAMES)(input_layer)
         layer1 = Activation('relu')(layer1)
-        # layer2 = Dense(self.observation_size)(layer1)
-        # layer2 = Activation('relu')(layer2)
         layer3 = Dense(self.observation_size)(layer1)
         layer3 = Activation('relu')(layer3)
         layer4 = Dense(2 * self.action_size)(layer3)
@@ -43,9 +43,9 @@ class DeepQ(object):
         self.target_model.set_weights(self.model.get_weights())
 
     def predict_movement(self, data, epsilon):
-        """ Predict movement of game controler where is epsilon probability randomly move.
-        Returns the optimal action and the predicted reward for that action.
-        """
+        """ Predict the next action from the network. Epsilon is the probability of making a random move.
+        Returns the optimal action and the predicted reward for that action. """
+
         rand_val = np.random.random()
         q_actions = self.model.predict(data.reshape(1, self.observation_size * NUM_FRAMES), batch_size=1)
 
@@ -59,12 +59,16 @@ class DeepQ(object):
         return opt_policy, q_actions[0][opt_policy]
 
     def predict_rewards(self, data):
+        """ Like predict_movement, only without a probability of a random move and returns only the predicted
+        q-values."""
+
         q_actions = self.model.predict(np.array(data).reshape(1, self.observation_size * NUM_FRAMES), batch_size=1)
         return q_actions[0]
 
     def train(self, s_batch, a_batch, r_batch, d_batch, s2_batch):
         """ Trains the network on a batch of input.
         The parameters are batches of states, actions, rewards, done booleans and next states. """
+
         batch_size = s_batch.shape[0]
 
         # Train according to the Bellman Equation
@@ -76,6 +80,7 @@ class DeepQ(object):
 
         targets_ts = tf.convert_to_tensor(targets, dtype=tf.float32)
         loss = self.model.train_on_batch(s_batch, targets_ts)
+
         return loss
 
     def train_imitation(self, s_batch, t_batch):
@@ -94,13 +99,9 @@ class DeepQ(object):
         print("Successfully loaded network.")
 
     def target_train(self):
+        """ The target network is updated each step by 'merging' a small part of the actual network into it. """
         model_weights = self.model.get_weights()
         target_model_weights = self.target_model.get_weights()
         for i in range(len(model_weights)):
             target_model_weights[i] = TAU * model_weights[i] + (1 - TAU) * target_model_weights[i]
         self.target_model.set_weights(target_model_weights)
-
-    def replace_target(self):
-        """ The target network needs to be updated every specific number of timesteps. """
-        model_weights = self.model.get_weights()
-        self.target_model.set_weights(model_weights)
