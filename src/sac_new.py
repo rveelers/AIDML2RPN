@@ -217,7 +217,7 @@ class SACNetwork(object):
         policy_loss = self._train_policy_network(s_batch, batch_size)
 
         # (3) training of VALUE function
-        value_loss = self._train_value_network(s_batch, a_batch, batch_size)
+        value_loss = self._train_value_network(s_batch, batch_size)
 
         # (4) save statistics to tensorboard logs
         if tf_writer is not None:
@@ -305,7 +305,7 @@ class SACNetwork(object):
 
         return policy_loss
 
-    def _train_value_network(self, s_batch, a_batch, batch_size):
+    def _train_value_network(self, s_batch, batch_size):
         """Train the value network on a batch of data. Return the loss value."""
         # Create a huge matrix of shape (batch_size*action_size, observation_size). It is essentially action_size copies
         # of s_batch stacked on top of each other.
